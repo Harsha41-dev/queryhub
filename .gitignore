@@ -1,0 +1,68 @@
+# Dependencies and package-manager caches
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+
+# Next.js and generated build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Test, coverage, and browser artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+*.trace.zip
+
+# Runtime files and local uploads
+/.local-uploads/
+/uploads/
+/tmp/
+/temp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases and Docker volume bind mounts
+*.db
+*.db-journal
+prisma/dev.db
+postgres-data/
+data/postgres/
+
+# Secrets and machine-specific environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# Hosting and tool state
+.vercel/
+.turbo/
+.cache/
+
+# IDE and editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating-system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
