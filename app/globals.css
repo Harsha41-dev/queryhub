@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 245 58% 51%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 220 18% 95%;
+    --muted-foreground: 217 15% 42%;
+    --border: 220 16% 88%;
+    --input: 220 16% 84%;
+    --ring: 245 58% 51%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 222 30% 8%;
+    --foreground: 213 31% 91%;
+    --card: 222 25% 11%;
+    --card-foreground: 213 31% 91%;
+    --primary: 245 72% 67%;
+    --primary-foreground: 222 35% 8%;
+    --muted: 222 20% 16%;
+    --muted-foreground: 215 16% 66%;
+    --border: 217 18% 20%;
+    --input: 217 18% 25%;
+    --ring: 245 72% 67%;
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .prose-answer p + p {
+    margin-top: 0.9rem;
+  }
+  .prose-answer h2 {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 1.2rem;
+    font-weight: 750;
+  }
+  .prose-answer h3 {
+    margin: 1rem 0 0.4rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  .prose-answer ul {
+    margin: 0.75rem 0;
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .prose-answer ol {
+    margin: 0.75rem 0;
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+  .prose-answer blockquote {
+    margin: 1rem 0;
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-answer code {
+    border-radius: 0.25rem;
+    background: hsl(var(--muted));
+    padding: 0.1rem 0.35rem;
+    font-size: 0.875em;
+  }
+  .prose-answer pre {
+    margin: 1rem 0;
+    overflow-x: auto;
+    border-radius: 0.5rem;
+    background: hsl(var(--muted));
+    padding: 0.875rem;
+  }
+  .prose-answer pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .prose-answer a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

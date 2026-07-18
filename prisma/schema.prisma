@@ -1,0 +1,484 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum VoteValue {
+  UP
+  DOWN
+}
+
+enum NotificationType {
+  NEW_FOLLOWER
+  NEW_ANSWER
+  COMMENT
+  REPLY
+  UPVOTE
+  MENTION
+  MODERATION
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  MISINFORMATION
+  HATE_ABUSE
+  COPYRIGHT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  DISMISSED
+  ACTIONED
+}
+
+enum ModerationActionType {
+  HIDE_CONTENT
+  RESTORE_CONTENT
+  SUSPEND_USER
+  UNSUSPEND_USER
+  DISMISS_REPORT
+  ADD_NOTE
+}
+
+model User {
+  id                   String                   @id @default(cuid())
+  email                String                   @unique
+  emailVerified        DateTime?
+  passwordHash         String?
+  name                 String
+  username             String                   @unique
+  image                String?
+  role                 Role                     @default(USER)
+  bio                  String?                  @db.VarChar(500)
+  location             String?
+  occupation           String?
+  website              String?
+  reputation           Int                      @default(0)
+  suspendedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  deletedAt            DateTime?
+  accounts             Account[]
+  sessions             Session[]
+  questions            Question[]
+  answers              Answer[]
+  comments             Comment[]
+  votes                Vote[]
+  following            UserFollow[]             @relation("following")
+  followers            UserFollow[]             @relation("followers")
+  topicFollows         TopicFollow[]
+  questionFollows      QuestionFollow[]
+  bookmarks            Bookmark[]
+  notifications        Notification[]           @relation("notificationRecipient")
+  notificationsSent    Notification[]           @relation("notificationActor")
+  reports              Report[]                 @relation("reporter")
+  reportsAgainst       Report[]                 @relation("reportedProfile")
+  moderationActions    ModerationAction[]       @relation("moderator")
+  moderatedUserActions ModerationAction[]       @relation("moderatedUser")
+  media                MediaAttachment[]
+  preference           UserPreference?
+  passwordResetTokens  PasswordResetToken[]
+  verificationTokens   EmailVerificationToken[]
+  emailChangeTokens    EmailChangeToken[]
+  sessionVersion       Int                      @default(0)
+
+  @@index([createdAt])
+  @@index([role, deletedAt])
+  @@index([reputation])
+  @@index([deletedAt, suspendedAt, reputation])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm_idx")
+  @@index([username(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_username_trgm_idx")
+  @@index([bio(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_bio_trgm_idx")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model EmailChangeToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  newEmail  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([newEmail])
+}
+
+model Question {
+  id                String             @id @default(cuid())
+  slug              String             @unique
+  title             String             @db.VarChar(240)
+  description       String?            @db.Text
+  authorId          String
+  viewCount         Int                @default(0)
+  score             Int                @default(0)
+  answerCount       Int                @default(0)
+  isHidden          Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  author            User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  topics            QuestionTopic[]
+  answers           Answer[]
+  votes             Vote[]
+  followers         QuestionFollow[]
+  bookmarks         Bookmark[]
+  reports           Report[]
+  media             MediaAttachment[]
+  notifications     Notification[]
+  moderationActions ModerationAction[]
+
+  @@index([createdAt, deletedAt])
+  @@index([authorId, createdAt])
+  @@index([score])
+  @@index([answerCount])
+  @@index([deletedAt, isHidden, createdAt])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Question_title_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "Question_description_trgm_idx")
+}
+
+model Answer {
+  id                String             @id @default(cuid())
+  content           String             @db.Text
+  questionId        String
+  authorId          String
+  score             Int                @default(0)
+  commentCount      Int                @default(0)
+  isHidden          Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  question          Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  author            User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  comments          Comment[]
+  votes             Vote[]
+  bookmarks         Bookmark[]
+  reports           Report[]
+  media             MediaAttachment[]
+  notifications     Notification[]
+  moderationActions ModerationAction[]
+
+  @@unique([questionId, authorId])
+  @@index([questionId, score])
+  @@index([authorId, createdAt])
+  @@index([createdAt, deletedAt])
+  @@index([questionId, deletedAt, isHidden, score])
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "Answer_content_trgm_idx")
+}
+
+model Comment {
+  id                String             @id @default(cuid())
+  content           String             @db.VarChar(2000)
+  answerId          String
+  authorId          String
+  parentId          String?
+  depth             Int                @default(0)
+  score             Int                @default(0)
+  isHidden          Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  answer            Answer             @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  author            User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  parent            Comment?           @relation("commentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies           Comment[]          @relation("commentReplies")
+  votes             Vote[]
+  reports           Report[]
+  notifications     Notification[]
+  moderationActions ModerationAction[]
+
+  @@index([answerId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([authorId])
+  @@index([answerId, deletedAt, isHidden, createdAt])
+}
+
+model Topic {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  slug              String             @unique
+  description       String             @db.VarChar(1000)
+  image             String?
+  color             String?
+  followerCount     Int                @default(0)
+  questionCount     Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  questions         QuestionTopic[]
+  followers         TopicFollow[]
+  moderationActions ModerationAction[]
+
+  @@index([followerCount])
+  @@index([createdAt])
+  @@index([deletedAt, followerCount])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Topic_name_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "Topic_description_trgm_idx")
+}
+
+model QuestionTopic {
+  questionId String
+  topicId    String
+  createdAt  DateTime @default(now())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic      Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, topicId])
+  @@index([topicId, createdAt])
+}
+
+model Vote {
+  id         String    @id @default(cuid())
+  value      VoteValue
+  userId     String
+  questionId String?
+  answerId   String?
+  commentId  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer     Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  comment    Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@unique([userId, answerId])
+  @@unique([userId, commentId])
+  @@index([questionId, value])
+  @@index([answerId, value])
+  @@index([commentId, value])
+}
+
+model UserFollow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId, createdAt])
+}
+
+model TopicFollow {
+  userId    String
+  topicId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([userId, topicId])
+  @@index([topicId, createdAt])
+}
+
+model QuestionFollow {
+  userId     String
+  questionId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, questionId])
+  @@index([questionId, createdAt])
+}
+
+model Bookmark {
+  id         String    @id @default(cuid())
+  userId     String
+  questionId String?
+  answerId   String?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer     Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@unique([userId, answerId])
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  recipientId String
+  actorId     String?
+  questionId  String?
+  answerId    String?
+  commentId   String?
+  message     String           @db.VarChar(500)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  recipient   User             @relation("notificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?            @relation("notificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  question    Question?        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer      Answer?          @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  comment     Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt, createdAt])
+}
+
+model Report {
+  id            String             @id @default(cuid())
+  reporterId    String
+  questionId    String?
+  answerId      String?
+  commentId     String?
+  profileId     String?
+  reason        ReportReason
+  details       String?            @db.VarChar(2000)
+  status        ReportStatus       @default(PENDING)
+  moderatorNote String?            @db.VarChar(2000)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  resolvedAt    DateTime?
+  reporter      User               @relation("reporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  profile       User?              @relation("reportedProfile", fields: [profileId], references: [id], onDelete: Cascade)
+  question      Question?          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer        Answer?            @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  comment       Comment?           @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  actions       ModerationAction[]
+
+  @@index([status, createdAt])
+  @@index([reporterId])
+}
+
+model ModerationAction {
+  id          String               @id @default(cuid())
+  action      ModerationActionType
+  moderatorId String
+  reportId    String?
+  userId      String?
+  questionId  String?
+  answerId    String?
+  commentId   String?
+  topicId     String?
+  note        String?              @db.VarChar(2000)
+  createdAt   DateTime             @default(now())
+  moderator   User                 @relation("moderator", fields: [moderatorId], references: [id], onDelete: Restrict)
+  user        User?                @relation("moderatedUser", fields: [userId], references: [id], onDelete: SetNull)
+  report      Report?              @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  question    Question?            @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  answer      Answer?              @relation(fields: [answerId], references: [id], onDelete: SetNull)
+  comment     Comment?             @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  topic       Topic?               @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([moderatorId, createdAt])
+  @@index([reportId])
+  @@index([topicId])
+}
+
+model MediaAttachment {
+  id         String    @id @default(cuid())
+  userId     String
+  questionId String?
+  answerId   String?
+  url        String
+  mimeType   String
+  size       Int
+  width      Int?
+  height     Int?
+  alt        String?   @db.VarChar(300)
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer     Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([questionId])
+  @@index([answerId])
+}
+
+model UserPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  theme             String   @default("system")
+  profilePublic     Boolean  @default(true)
+  showActivity      Boolean  @default(true)
+  allowMessages     Boolean  @default(true)
+  emailDigest       Boolean  @default(true)
+  emailAnswers      Boolean  @default(true)
+  emailComments     Boolean  @default(true)
+  emailFollowers    Boolean  @default(false)
+  pushNotifications Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([profilePublic])
+}
