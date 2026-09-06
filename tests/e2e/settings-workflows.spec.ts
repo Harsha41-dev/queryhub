@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { login } from "./helpers";
+import { finishOnboardingIfNeeded, login } from "./helpers";
 
 const prisma = new PrismaClient();
 const marker = `settings${Date.now()}`;
@@ -24,6 +24,7 @@ test("persists profile, privacy, notification, theme, account, and deletion sett
   await page.getByLabel("Confirm password").fill("Workflow123");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Create account" }).click();
+  await finishOnboardingIfNeeded(page);
   await expect(page).toHaveURL(/\/home/);
 
   await page.goto("/settings/profile");

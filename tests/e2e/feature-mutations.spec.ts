@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
+import { finishOnboardingIfNeeded } from "./helpers";
 
 const prisma = new PrismaClient();
 
@@ -23,6 +24,7 @@ test.describe.serial("complete content and social mutations", () => {
     await page.getByLabel("Confirm password").fill("Workflow123");
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
+    await finishOnboardingIfNeeded(page);
     await expect(page).toHaveURL(/\/home/);
 
     await page.reload();

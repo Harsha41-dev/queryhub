@@ -1,11 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { finishOnboardingIfNeeded, login } from "./helpers";
 
 test.describe.serial("core member workflows", () => {
   test.setTimeout(90_000);
   test("login with demo credentials", async ({ page }) => {
-    await page.goto("/login");
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
     await expect(
       page.getByText("What do you want to know?").first(),
     ).toBeVisible();
@@ -25,6 +24,7 @@ test.describe.serial("core member workflows", () => {
     await page.getByLabel("Confirm password").fill("Workflow123");
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
+    await finishOnboardingIfNeeded(page);
     await expect(page).toHaveURL(/\/home/);
 
     await page.getByRole("button", { name: "Ask a question" }).click();
