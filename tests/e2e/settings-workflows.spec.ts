@@ -3,9 +3,6 @@ import { PrismaClient } from "@prisma/client";
 import { finishOnboardingIfNeeded, login } from "./helpers";
 
 const prisma = new PrismaClient();
-const marker = `settings${Date.now()}`;
-const originalEmail = `${marker}@example.com`;
-const changedEmail = `${marker}.changed@example.com`;
 
 test.setTimeout(120_000);
 
@@ -15,7 +12,11 @@ test.afterAll(async () => {
 
 test("persists profile, privacy, notification, theme, account, and deletion settings", async ({
   page,
-}) => {
+}, testInfo) => {
+  const marker = `settings${Date.now()}r${testInfo.retry}`;
+  const originalEmail = `${marker}@example.com`;
+  const changedEmail = `${marker}.changed@example.com`;
+
   await page.goto("/register");
   await page.getByLabel("Full name").fill("Settings Audit");
   await page.getByLabel("Username").fill(marker);

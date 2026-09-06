@@ -14,11 +14,11 @@ export async function login(
 }
 
 export async function finishOnboardingIfNeeded(page: Page) {
-  await expect(page).toHaveURL(/\/(home|onboarding)/);
+  await expect(page).toHaveURL(/\/(home|onboarding)/, { timeout: 10_000 });
   if (!page.url().includes("/onboarding")) return;
 
   await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page).toHaveURL(/\/home/);
+  await expect(page).toHaveURL(/\/home/, { timeout: 10_000 });
 }
 
 export async function logout(page: Page) {

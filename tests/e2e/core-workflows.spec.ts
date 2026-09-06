@@ -12,8 +12,8 @@ test.describe.serial("core member workflows", () => {
 
   test("register, ask, answer, vote, bookmark, and report", async ({
     page,
-  }) => {
-    const unique = Date.now();
+  }, testInfo) => {
+    const unique = `${Date.now()}r${testInfo.retry}`;
     await page.goto("/register");
     await page.getByLabel("Full name").fill("Workflow Tester");
     await page.getByLabel("Username").fill(`workflow_${unique}`);
@@ -52,6 +52,12 @@ test.describe.serial("core member workflows", () => {
     await page.getByRole("button", { name: "Publish answer" }).click();
     await expect(page.getByText("Your answer was published")).toBeVisible();
 
+    await page.goto(
+      "/question/why-do-database-migrations-fail-in-production-even-when-they-passed-in-staging",
+    );
+    await expect(
+      page.getByRole("heading", { name: /database migrations/i }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Upvote question" }).click();
     await page.getByRole("button", { name: "Save question" }).click();
     await expect(page.getByText("Question saved")).toBeVisible();

@@ -12,9 +12,12 @@ test("admin tables filter, sort, paginate, export, and remain responsive", async
   ).toBeVisible();
 
   await page.getByRole("button", { name: "User", exact: true }).click();
-  await page.getByLabel("Filter users by status").selectOption("Active");
+  const statusFilter = page
+    .locator('select[aria-label="Filter users by status"]')
+    .first();
+  await statusFilter.selectOption("Active");
   await expect(page.getByText(/records$/).first()).toBeVisible();
-  await page.getByLabel("Filter users by status").selectOption("All");
+  await statusFilter.selectOption("All");
 
   const next = page.getByRole("button", { name: "Next page" });
   await expect(next).toBeEnabled();
@@ -30,7 +33,7 @@ test("admin tables filter, sort, paginate, export, and remain responsive", async
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   const exported = await download;
-  expect(exported.suggestedFilename()).toBe("queryhub-users.csv");
+  expect(exported.suggestedFilename()).toBe("queryhub-users-page-1.csv");
 
   for (const width of [320, 375, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });

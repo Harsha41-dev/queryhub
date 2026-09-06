@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { finishOnboardingIfNeeded } from "./helpers";
+import { finishOnboardingIfNeeded, login } from "./helpers";
 
 const prisma = new PrismaClient();
 
@@ -12,9 +12,10 @@ test.describe.serial("complete content and social mutations", () => {
   });
 
   test("registers and persists question, answer, comment, vote, bookmark, follow, search, and report changes", async ({
+    browser,
     page,
-  }) => {
-    const marker = `audit${Date.now()}`;
+  }, testInfo) => {
+    const marker = `audit${Date.now()}r${testInfo.retry}`;
     const email = `${marker}@example.com`;
     await page.goto("/register");
     await page.getByLabel("Full name").fill("Audit Workflow");
@@ -146,37 +147,57 @@ test.describe.serial("complete content and social mutations", () => {
       ).status(),
     ).toBe(200);
 
-    const voteBody = { answerId: answer.id, value: 1 };
-    const [firstVote, duplicateVote] = await Promise.all([
-      page.request.post("/api/votes", { data: voteBody }),
-      page.request.post("/api/votes", { data: voteBody }),
-    ]);
-    expect(firstVote.status()).toBe(200);
-    expect(duplicateVote.status()).toBe(200);
-    expect(
-      await prisma.vote.count({
-        where: { userId: user.id, answerId: answer.id },
-      }),
-    ).toBe(1);
-    expect(
-      (
-        await page.request.post("/api/votes", {
-          data: { answerId: answer.id, value: -1 },
-        })
-      ).status(),
-    ).toBe(200);
-    expect(
-      (
-        await page.request.post("/api/votes", {
-          data: { answerId: answer.id, value: 0 },
-        })
-      ).status(),
-    ).toBe(200);
-    expect(
-      await prisma.vote.count({
-        where: { userId: user.id, answerId: answer.id },
-      }),
-    ).toBe(0);
+    const voterContext = await browser.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const voterPage = await voterContext.newPage();
+    try {
+      await login(voterPage);
+      const voteBody = { answerId: answer.id, value: 1 };
+      const [firstVote, duplicateVote] = await Promise.all([
+        voterPage.request.post("/api/votes", { data: voteBody }),
+        voterPage.request.post("/api/votes", { data: voteBody }),
+      ]);
+      expect(firstVote.status()).toBe(200);
+      expect(duplicateVote.status()).toBe(200);
+      expect(
+        await prisma.vote.count({
+          where: { userId: mentionedUser.id, answerId: answer.id },
+        }),
+      ).toBe(1);
+      expect(
+        (
+          await voterPage.request.post("/api/votes", {
+            data: { answerId: answer.id, value: -1 },
+          })
+        ).status(),
+      ).toBe(200);
+      expect(
+        (
+          await voterPage.request.post("/api/votes", {
+            data: { answerId: answer.id, value: 0 },
+          })
+        ).status(),
+      ).toBe(200);
+      expect(
+        await prisma.vote.count({
+          where: { userId: mentionedUser.id, answerId: answer.id },
+        }),
+      ).toBe(0);
+      expect(
+        (
+          await voterPage.request.post("/api/reports", {
+            data: {
+              answerId: answer.id,
+              reason: "OTHER",
+              details: `Audit report ${marker}`,
+            },
+          })
+        ).status(),
+      ).toBe(201);
+    } finally {
+      await voterContext.close();
+    }
 
     expect(
       (
@@ -263,18 +284,6 @@ test.describe.serial("complete content and social mutations", () => {
         `${category} search for ${query}`,
       ).toBeGreaterThan(0);
     }
-    expect(
-      (
-        await page.request.post("/api/reports", {
-          data: {
-            answerId: answer.id,
-            reason: "OTHER",
-            details: `Audit report ${marker}`,
-          },
-        })
-      ).status(),
-    ).toBe(201);
-
     expect(
       (await page.request.delete(`/api/comments/${comment.data.id}`)).status(),
     ).toBe(200);
