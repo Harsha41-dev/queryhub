@@ -7,7 +7,11 @@ import { SearchView } from "@/components/search/search-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActiveSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Search" };
+export const metadata: Metadata = {
+  title: "Search",
+  description: "Search public QueryHub questions, answers, topics, and people.",
+  robots: { index: false, follow: true },
+};
 export default async function SearchPage() {
   const session = await getActiveSession();
   return (

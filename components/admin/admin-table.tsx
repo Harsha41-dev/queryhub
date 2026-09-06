@@ -1,9 +1,8 @@
 "use client";
 
 // admin table for users / content / reports / topics
-// filter + sort + pagination all happen on the client for now
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpDown,
@@ -12,6 +11,7 @@ import {
   ChevronRight,
   Download,
   Eye,
+  GitMerge,
   Search,
   ShieldBan,
   SlidersHorizontal,
@@ -22,23 +22,24 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useModalFocus } from "@/components/ui/use-modal-focus";
-import type { AdminRow } from "@/lib/types";
+import type { AdminRow, AdminRowsPage } from "@/lib/types";
 
 type Kind = "users" | "content" | "reports" | "topics";
 
 export function AdminTable({
   kind,
-  rows: initialRows,
-  initialQuery = "",
+  initialPage,
 }: {
   kind: Kind;
-  rows: AdminRow[];
-  initialQuery?: string;
+  initialPage: AdminRowsPage;
 }) {
-  const [rows, setRows] = useState(initialRows);
-  const [query, setQuery] = useState(initialQuery);
-  const [filter, setFilter] = useState("All");
-  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState(initialPage.rows);
+  const [query, setQuery] = useState(initialPage.query);
+  const [filter, setFilter] = useState(initialPage.status);
+  const [page, setPage] = useState(initialPage.page);
+  const [total, setTotal] = useState(initialPage.total);
+  const [sort, setSort] = useState<"asc" | "desc">(initialPage.sort);
+  const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<{
     id: string;
     action: string;
@@ -46,29 +47,10 @@ export function AdminTable({
     endpoint: string;
     target?: AdminRow["target"];
   } | null>(null);
-  const [sortAsc, setSortAsc] = useState(true);
-  const pageSize = 10;
-
-  // filter by search box + status chip, then sort by name
-  const filteredRows = useMemo(
-    () =>
-      rows
-        .filter(
-          (item) =>
-            `${item.primary} ${item.secondary} ${item.meta} ${item.status}`
-              .toLowerCase()
-              .includes(query.toLowerCase()) &&
-            (filter === "All" || item.status === filter),
-        )
-        .sort((a, b) =>
-          sortAsc
-            ? a.primary.localeCompare(b.primary)
-            : b.primary.localeCompare(a.primary),
-        ),
-    [filter, query, rows, sortAsc],
-  );
-  const shown = filteredRows.slice((page - 1) * pageSize, page * pageSize);
-  const pages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const firstLoad = useRef(true);
+  const pageSize = initialPage.pageSize;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const shown = rows;
   const title = {
     users: "Community members",
     content: "Questions and answers",
@@ -76,21 +58,65 @@ export function AdminTable({
     topics: "Knowledge topics",
   }[kind];
 
-  // run the moderation action after the confirm dialog
-  async function confirm(note: string) {
+  useEffect(() => {
+    if (firstLoad.current) {
+      firstLoad.current = false;
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          kind,
+          q: query,
+          status: filter,
+          page: String(page),
+          pageSize: String(pageSize),
+          sort,
+        });
+        const response = await fetch(`/api/admin/rows?${params}`, {
+          signal: controller.signal,
+        });
+        const result = (await response.json()) as {
+          ok: boolean;
+          data?: AdminRowsPage;
+          error?: { message: string };
+        };
+        if (!response.ok || !result.ok || !result.data)
+          throw new Error(result.error?.message ?? "Rows could not load");
+        setRows(result.data.rows);
+        setTotal(result.data.total);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        toast.error(
+          error instanceof Error ? error.message : "Rows could not load",
+        );
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [filter, kind, page, pageSize, query, sort]);
+
+  async function confirmAction(note: string, targetQuestionId?: string) {
     if (!dialog) return;
-    // content vs report endpoints take slightly different bodies
     const body =
-      dialog.endpoint === "/api/admin/content"
-        ? {
-            target: dialog.target,
-            id: dialog.id,
-            action: dialog.endpointAction,
-            note,
-          }
-        : { action: dialog.endpointAction, note };
+      dialog.endpointAction === "MERGE_QUESTION"
+        ? { targetQuestionId, note }
+        : dialog.endpoint === "/api/admin/content"
+          ? {
+              target: dialog.target,
+              id: dialog.id,
+              action: dialog.endpointAction,
+              note,
+            }
+          : { action: dialog.endpointAction, note };
     const response = await fetch(dialog.endpoint, {
-      method: "PATCH",
+      method: dialog.endpointAction === "MERGE_QUESTION" ? "POST" : "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -103,23 +129,25 @@ export function AdminTable({
       toast.error(result.error?.message ?? "Action failed");
       return;
     }
-    // update the row status in place so we don't need a full reload
-    setRows(
-      rows.map((row) =>
-        row.id === result.data?.id
-          ? { ...row, status: result.data.status }
-          : row,
-      ),
+    setRows((current) =>
+      current
+        .map((row) =>
+          row.id === result.data?.id
+            ? { ...row, status: result.data.status }
+            : row,
+        )
+        .filter((row) => filter === "All" || row.status === filter),
     );
+    if (filter !== "All" && result.data.status !== filter)
+      setTotal((current) => Math.max(0, current - 1));
     setDialog(null);
     toast.success(`${dialog.action} completed`);
   }
 
-  // download current filtered rows as a csv file
   function exportCsv() {
     const csv = [
       "Primary,Secondary,Meta,Status,Activity",
-      ...filteredRows.map((row) =>
+      ...shown.map((row) =>
         [row.primary, row.secondary, row.meta, row.status, row.date]
           .map(csvCell)
           .join(","),
@@ -129,40 +157,50 @@ export function AdminTable({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `queryhub-${kind}.csv`;
+    link.download = `queryhub-${kind}-page-${page}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
-  // open the confirm dialog for a row action
   function openAction(
     row: AdminRow,
-    action: "dismiss" | "hide" | "restore" | "suspend" | "unsuspend",
+    action:
+      | "dismiss"
+      | "hide"
+      | "restore"
+      | "suspend"
+      | "unsuspend"
+      | "note"
+      | "merge",
   ) {
     if (kind === "reports") {
       const profile = row.target === "user";
       setDialog({
         id: row.id,
         action:
-          action === "dismiss"
-            ? "Dismiss report"
-            : action === "restore"
-              ? profile
-                ? "Unsuspend user"
-                : "Restore content"
-              : profile
-                ? "Suspend user"
-                : "Hide content",
+          action === "note"
+            ? "Add note"
+            : action === "dismiss"
+              ? "Dismiss report"
+              : action === "restore"
+                ? profile
+                  ? "Unsuspend user"
+                  : "Restore content"
+                : profile
+                  ? "Suspend user"
+                  : "Hide content",
         endpointAction:
-          action === "dismiss"
-            ? "DISMISS_REPORT"
-            : action === "restore"
-              ? profile
-                ? "UNSUSPEND_USER"
-                : "RESTORE_CONTENT"
-              : profile
-                ? "SUSPEND_USER"
-                : "HIDE_CONTENT",
+          action === "note"
+            ? "ADD_NOTE"
+            : action === "dismiss"
+              ? "DISMISS_REPORT"
+              : action === "restore"
+                ? profile
+                  ? "UNSUSPEND_USER"
+                  : "RESTORE_CONTENT"
+                : profile
+                  ? "SUSPEND_USER"
+                  : "HIDE_CONTENT",
         endpoint: `/api/admin/reports/${row.id}`,
       });
     } else if (kind === "users") {
@@ -174,6 +212,16 @@ export function AdminTable({
         endpoint: `/api/admin/users/${row.id}`,
       });
     } else if (kind === "content") {
+      if (action === "merge" && row.target === "question") {
+        setDialog({
+          id: row.id,
+          target: row.target,
+          action: "Merge question",
+          endpointAction: "MERGE_QUESTION",
+          endpoint: `/api/admin/questions/${row.id}/merge`,
+        });
+        return;
+      }
       setDialog({
         id: row.id,
         target: row.target,
@@ -199,9 +247,7 @@ export function AdminTable({
       <section className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-xl font-extrabold">{title}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {filteredRows.length} records
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{total} records</p>
         </div>
         <Button className="sm:ml-auto" onClick={exportCsv}>
           <Download className="size-4" />
@@ -243,6 +289,8 @@ export function AdminTable({
               <option>Published</option>
               <option>Suspended</option>
               <option>Hidden</option>
+              <option>Deleted</option>
+              <option>Merged</option>
             </select>
           </label>
         </div>
@@ -252,7 +300,10 @@ export function AdminTable({
               <tr>
                 <th className="px-3 py-3">
                   <button
-                    onClick={() => setSortAsc(!sortAsc)}
+                    onClick={() => {
+                      setSort(sort === "asc" ? "desc" : "asc");
+                      setPage(1);
+                    }}
                     className="flex items-center gap-1"
                   >
                     {kind === "users"
@@ -295,7 +346,13 @@ export function AdminTable({
                   <td className="px-3 py-3">
                     <Badge
                       className={
-                        ["Pending", "Suspended", "Hidden"].includes(item.status)
+                        [
+                          "Pending",
+                          "Reviewing",
+                          "Suspended",
+                          "Hidden",
+                          "Deleted",
+                        ].includes(item.status)
                           ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950"
                           : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950"
                       }
@@ -328,6 +385,13 @@ export function AdminTable({
                             className="grid size-8 place-items-center rounded-md text-emerald-600 hover:bg-muted"
                           >
                             <CheckCircle2 className="size-4" />
+                          </button>
+                          <button
+                            aria-label="Add report note"
+                            onClick={() => openAction(item, "note")}
+                            className="grid size-8 place-items-center rounded-md text-primary hover:bg-muted"
+                          >
+                            <SlidersHorizontal className="size-4" />
                           </button>
                           <button
                             aria-label={
@@ -376,22 +440,36 @@ export function AdminTable({
                         </button>
                       )}
                       {kind === "content" && (
-                        <button
-                          aria-label={
-                            item.status === "Hidden"
-                              ? "Restore content"
-                              : "Hide content"
-                          }
-                          onClick={() =>
-                            openAction(
-                              item,
-                              item.status === "Hidden" ? "restore" : "hide",
-                            )
-                          }
-                          className="grid size-8 place-items-center rounded-md text-rose-600 hover:bg-muted"
-                        >
-                          <ShieldBan className="size-4" />
-                        </button>
+                        <>
+                          {item.target === "question" &&
+                            item.status !== "Merged" && (
+                              <button
+                                aria-label="Merge duplicate question"
+                                onClick={() => openAction(item, "merge")}
+                                className="grid size-8 place-items-center rounded-md text-primary hover:bg-muted"
+                              >
+                                <GitMerge className="size-4" />
+                              </button>
+                            )}
+                          {item.status !== "Merged" && (
+                            <button
+                              aria-label={
+                                item.status === "Hidden"
+                                  ? "Restore content"
+                                  : "Hide content"
+                              }
+                              onClick={() =>
+                                openAction(
+                                  item,
+                                  item.status === "Hidden" ? "restore" : "hide",
+                                )
+                              }
+                              className="grid size-8 place-items-center rounded-md text-rose-600 hover:bg-muted"
+                            >
+                              <ShieldBan className="size-4" />
+                            </button>
+                          )}
+                        </>
                       )}
                       {kind === "topics" && (
                         <button
@@ -419,15 +497,16 @@ export function AdminTable({
           </table>
           {shown.length === 0 && (
             <div className="p-12 text-center text-sm text-muted-foreground">
-              No records match these filters.
+              {loading
+                ? "Loading records..."
+                : "No records match these filters."}
             </div>
           )}
         </div>
         <footer className="flex items-center justify-between border-t p-4 text-xs text-muted-foreground">
           <span>
             Showing {(page - 1) * pageSize + (shown.length ? 1 : 0)}-
-            {Math.min(page * pageSize, filteredRows.length)} of{" "}
-            {filteredRows.length}
+            {Math.min((page - 1) * pageSize + shown.length, total)} of {total}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -435,7 +514,7 @@ export function AdminTable({
               size="icon"
               className="size-8"
               aria-label="Previous page"
-              disabled={page === 1}
+              disabled={page === 1 || loading}
               onClick={() => setPage(page - 1)}
             >
               <ChevronLeft className="size-4" />
@@ -448,7 +527,7 @@ export function AdminTable({
               size="icon"
               className="size-8"
               aria-label="Next page"
-              disabled={page === pages}
+              disabled={page === pages || loading}
               onClick={() => setPage(page + 1)}
             >
               <ChevronRight className="size-4" />
@@ -460,10 +539,11 @@ export function AdminTable({
         <ConfirmDialog
           action={dialog.action}
           onCancel={() => setDialog(null)}
-          onConfirm={confirm}
+          onConfirm={confirmAction}
           destructive={
             dialog.action.includes("Hide") || dialog.action.includes("Suspend")
           }
+          requiresTarget={dialog.endpointAction === "MERGE_QUESTION"}
         />
       )}
     </div>
@@ -482,13 +562,16 @@ function ConfirmDialog({
   onCancel,
   onConfirm,
   destructive,
+  requiresTarget = false,
 }: {
   action: string;
   onCancel: () => void;
-  onConfirm: (note: string) => void;
+  onConfirm: (note: string, targetQuestionId?: string) => void;
   destructive: boolean;
+  requiresTarget?: boolean;
 }) {
   const [note, setNote] = useState("");
+  const [targetQuestionId, setTargetQuestionId] = useState("");
   const dialogRef = useModalFocus(true, onCancel);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
@@ -507,6 +590,17 @@ function ConfirmDialog({
           This change takes effect immediately and will be recorded in the
           moderation audit trail.
         </p>
+        {requiresTarget && (
+          <label className="mt-4 block text-sm font-semibold">
+            Target question ID
+            <input
+              value={targetQuestionId}
+              onChange={(event) => setTargetQuestionId(event.target.value)}
+              className="mt-1.5 h-10 w-full rounded-lg border bg-card px-3 text-sm font-normal outline-none focus:border-primary"
+              placeholder="Paste the canonical question ID"
+            />
+          </label>
+        )}
         <label className="mt-4 block text-sm font-semibold">
           Moderation note
           <textarea
@@ -522,7 +616,8 @@ function ConfirmDialog({
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            onClick={() => onConfirm(note)}
+            onClick={() => onConfirm(note, targetQuestionId.trim())}
+            disabled={requiresTarget && !targetQuestionId.trim()}
           >
             Confirm action
           </Button>

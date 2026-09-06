@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 // very small markdown renderer (no external markdown lib)
 
 import { cn } from "@/lib/utils";
@@ -95,8 +96,20 @@ export function MarkdownContent({
 
 function inline(value: string) {
   const token =
-    /(\*\*[^*]+\*\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
+    /(!\[[^\]]*\]\(https?:\/\/[^)\s]+\)|\*\*[^*]+\*\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
   return value.split(token).map((part, index) => {
+    const image = part.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/);
+    if (image)
+      return (
+        <img
+          key={`${index}-${part}`}
+          src={image[2]}
+          alt={image[1]}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="my-4 max-h-[520px] rounded-lg border object-contain"
+        />
+      );
     if (part.startsWith("**") && part.endsWith("**"))
       return <strong key={`${index}-${part}`}>{part.slice(2, -2)}</strong>;
     if (part.startsWith("_") && part.endsWith("_"))
@@ -110,7 +123,7 @@ function inline(value: string) {
           key={`${index}-${part}`}
           href={link[2]}
           target="_blank"
-          rel="nofollow noreferrer"
+          rel="nofollow noopener noreferrer"
         >
           {link[1]}
         </a>

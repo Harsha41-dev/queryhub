@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { trackAnalytics } from "@/lib/analytics";
 import { getActiveSession } from "@/lib/session";
+import { sendEmail } from "@/lib/email/provider";
+import { followerNotificationEmail } from "@/lib/email/templates";
 import { actionError, actionSuccess } from "@/lib/errors";
+import { env } from "@/lib/env";
+import { captureException } from "@/lib/monitoring";
+import { isNotificationMuted } from "@/lib/notification-mutes";
+import { recordTopicAffinity } from "@/lib/personalization";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { parseJson } from "@/lib/request";
@@ -39,7 +46,12 @@ export async function POST(request: Request) {
   if (parsed.data.userId) {
     const target = await prisma.user.findFirst({
       where: { id: parsed.data.userId, deletedAt: null, suspendedAt: null },
-      select: { id: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        preference: { select: { emailFollowers: true } },
+      },
     });
     if (!target)
       return NextResponse.json(
@@ -53,19 +65,53 @@ export async function POST(request: Request) {
       },
     };
     const existing = await prisma.userFollow.findUnique({ where: key });
-    await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      let notificationMuted = false;
       if (existing) await tx.userFollow.delete({ where: key });
       else {
         await tx.userFollow.create({ data: key.followerId_followingId });
-        await tx.notification.create({
-          data: {
-            recipientId: parsed.data.userId!,
-            actorId: session.user.id,
-            type: "NEW_FOLLOWER",
-            message: `${session.user.name ?? "Someone"} started following you`,
-          },
+        notificationMuted = await isNotificationMuted(tx, parsed.data.userId!, {
+          actorId: session.user.id,
         });
+        if (!notificationMuted)
+          await tx.notification.create({
+            data: {
+              recipientId: parsed.data.userId!,
+              actorId: session.user.id,
+              type: "NEW_FOLLOWER",
+              message: `${session.user.name ?? "Someone"} started following you`,
+            },
+          });
       }
+      return { notificationMuted };
+    });
+    if (
+      !existing &&
+      !result.notificationMuted &&
+      target.preference?.emailFollowers === true
+    )
+      void sendEmail(
+        followerNotificationEmail({
+          to: target.email,
+          name: target.name,
+          actor: session.user.name ?? "Someone",
+          url: `${env.APP_URL}/profile/${session.user.username}`,
+        }),
+      ).catch((error) =>
+        captureException(error, {
+          operation: "email.follower",
+          requestId: request.headers.get("x-request-id") ?? undefined,
+          userId: target.id,
+        }),
+      );
+    void trackAnalytics("follow_toggled", {
+      userId: session.user.id,
+      request,
+      properties: {
+        targetId: parsed.data.userId,
+        targetKind: "user",
+        following: !existing,
+      },
     });
     return NextResponse.json(actionSuccess({ following: !existing }));
   }
@@ -97,11 +143,31 @@ export async function POST(request: Request) {
             data: { followerCount: { increment: 1 } },
           }),
     ]);
+    if (!existing)
+      void recordTopicAffinity(prisma, {
+        userId: session.user.id,
+        topicIds: [parsed.data.topicId],
+        signal: "follow",
+      }).catch(() => undefined);
+    void trackAnalytics("follow_toggled", {
+      userId: session.user.id,
+      request,
+      properties: {
+        targetId: parsed.data.topicId,
+        targetKind: "topic",
+        following: !existing,
+      },
+    });
     return NextResponse.json(actionSuccess({ following: !existing }));
   }
   const target = await prisma.question.findFirst({
-    where: { id: parsed.data.questionId, deletedAt: null, isHidden: false },
-    select: { id: true },
+    where: {
+      id: parsed.data.questionId,
+      deletedAt: null,
+      isHidden: false,
+      mergedIntoId: null,
+    },
+    select: { id: true, topics: { select: { topicId: true } } },
   });
   if (!target)
     return NextResponse.json(
@@ -116,6 +182,22 @@ export async function POST(request: Request) {
   };
   const existing = await prisma.questionFollow.findUnique({ where: key });
   if (existing) await prisma.questionFollow.delete({ where: key });
-  else await prisma.questionFollow.create({ data: key.userId_questionId });
+  else {
+    await prisma.questionFollow.create({ data: key.userId_questionId });
+    void recordTopicAffinity(prisma, {
+      userId: session.user.id,
+      topicIds: target.topics.map((topic) => topic.topicId),
+      signal: "follow",
+    }).catch(() => undefined);
+  }
+  void trackAnalytics("follow_toggled", {
+    userId: session.user.id,
+    request,
+    properties: {
+      targetId: parsed.data.questionId!,
+      targetKind: "question",
+      following: !existing,
+    },
+  });
   return NextResponse.json(actionSuccess({ following: !existing }));
 }

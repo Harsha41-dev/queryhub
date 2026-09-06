@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   Bell,
   ChevronRight,
+  GraduationCap,
   Lock,
   Palette,
   Settings2,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/settings", label: "Overview", icon: Settings2 },
   { href: "/settings/profile", label: "Profile", icon: UserRound },
+  { href: "/settings/credentials", label: "Credentials", icon: GraduationCap },
   { href: "/settings/account", label: "Account", icon: Lock },
   { href: "/settings/privacy", label: "Privacy", icon: Palette },
   { href: "/settings/notifications", label: "Notifications", icon: Bell },

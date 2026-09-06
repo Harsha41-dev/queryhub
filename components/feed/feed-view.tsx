@@ -1,6 +1,6 @@
 "use client";
 
-// home feed shell – tabs, composer, and "load more"
+// home feed shell: tabs, composer, and "load more"
 
 import { useState } from "react";
 import { FeedCard } from "@/components/feed/feed-card";

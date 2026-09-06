@@ -3,24 +3,45 @@
 // single card in the home feed (vote / bookmark / follow / share)
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Bookmark,
   Check,
   ChevronDown,
   ChevronUp,
+  EyeOff,
   Ellipsis,
   Flag,
   MessageCircle,
   Share2,
+  UserMinus,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useModalFocus } from "@/components/ui/use-modal-focus";
 import type { FeedQuestion } from "@/lib/types";
 import { cn, compactNumber, relativeDate } from "@/lib/utils";
+
+type ReportReason =
+  | "SPAM"
+  | "HARASSMENT"
+  | "MISINFORMATION"
+  | "HATE_ABUSE"
+  | "COPYRIGHT"
+  | "OTHER";
+
+const reportReasons: Array<{ value: ReportReason; label: string }> = [
+  { value: "SPAM", label: "Spam" },
+  { value: "HARASSMENT", label: "Harassment" },
+  { value: "MISINFORMATION", label: "Misinformation" },
+  { value: "HATE_ABUSE", label: "Hate or abusive content" },
+  { value: "COPYRIGHT", label: "Copyright issue" },
+  { value: "OTHER", label: "Other" },
+];
 
 export function FeedCard({
   question,
@@ -29,6 +50,7 @@ export function FeedCard({
   question: FeedQuestion;
   publicMode?: boolean;
 }) {
+  const router = useRouter();
   const [score, setScore] = useState(question.score);
   const [vote, setVote] = useState<-1 | 0 | 1>(question.userVote ?? 0);
   const [bookmarked, setBookmarked] = useState(question.bookmarked ?? false);
@@ -36,6 +58,8 @@ export function FeedCard({
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // if the feed is public, ask them to log in first
   function requireAuth(action: () => void | Promise<void>) {
@@ -44,7 +68,7 @@ export function FeedCard({
         action: {
           label: "Sign in",
           onClick: () => {
-            window.location.href = "/login";
+            router.push("/login");
           },
         },
       });
@@ -134,18 +158,59 @@ export function FeedCard({
   }
 
   // send a report to mods
-  function reportContent() {
+  function reportContent(reason: ReportReason, details: string) {
     requireAuth(async () => {
+      const answerId = question.voteAnswerId ?? question.bookmarkAnswerId;
       const response = await fetch("/api/reports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ questionId: question.id, reason: "OTHER" }),
+        body: JSON.stringify({
+          ...(answerId ? { answerId } : { questionId: question.id }),
+          reason,
+          details: details || undefined,
+        }),
       });
+      if (response.ok) setReportOpen(false);
       if (!response.ok) {
         toast.error("Report could not be submitted");
         return;
       }
       toast.success("Report submitted for review");
+    });
+  }
+
+  function tuneFeed(
+    type: "HIDE_QUESTION" | "MUTE_USER" | "NOT_INTERESTED_TOPIC",
+  ) {
+    requireAuth(async () => {
+      const topicId = question.topicItems?.[0]?.id;
+      const body =
+        type === "HIDE_QUESTION"
+          ? { type, questionId: question.id }
+          : type === "MUTE_USER"
+            ? { type, authorId: question.author.id ?? question.authorId }
+            : { type, topicId };
+      if (type === "NOT_INTERESTED_TOPIC" && !topicId) {
+        toast.error("Topic preference could not be saved");
+        return;
+      }
+      const response = await fetch("/api/feed-feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        toast.error("Feed preference could not be saved");
+        return;
+      }
+      setHidden(true);
+      toast.success(
+        type === "MUTE_USER"
+          ? "User muted from your feed"
+          : type === "NOT_INTERESTED_TOPIC"
+            ? "Topic tuned down"
+            : "Question hidden",
+      );
     });
   }
 
@@ -158,6 +223,8 @@ export function FeedCard({
       toast.success("Link copied");
     }
   }
+
+  if (hidden) return null;
 
   return (
     <article className="border-y bg-card p-4 shadow-card sm:rounded-xl sm:border sm:p-5">
@@ -191,6 +258,15 @@ export function FeedCard({
           <p className="truncate text-xs text-muted-foreground">
             {question.author.headline}
           </p>
+          {question.author.badges && question.author.badges.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {question.author.badges.map((badge) => (
+                <Badge key={badge} className="px-2 py-0 text-[10px]">
+                  {badge}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
         <div className="relative">
           <button
@@ -202,11 +278,43 @@ export function FeedCard({
             <Ellipsis className="size-5" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-9 z-10 w-48 rounded-xl border bg-card p-1.5 shadow-xl">
+            <div className="absolute right-0 top-9 z-10 w-56 rounded-xl border bg-card p-1.5 shadow-xl">
               <button
                 onClick={() => {
                   setMenuOpen(false);
-                  reportContent();
+                  tuneFeed("HIDE_QUESTION");
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <EyeOff className="size-4" />
+                Hide question
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  tuneFeed("MUTE_USER");
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <UserMinus className="size-4" />
+                Mute this user
+              </button>
+              {question.topicItems?.[0]?.id && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    tuneFeed("NOT_INTERESTED_TOPIC");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                >
+                  <EyeOff className="size-4" />
+                  Not interested in {question.topicItems[0].name}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  requireAuth(() => setReportOpen(true));
                 }}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
               >
@@ -221,6 +329,18 @@ export function FeedCard({
         {question.topics.map((topic) => (
           <Badge key={topic}>{topic}</Badge>
         ))}
+        {question.spaces?.map((space) => (
+          <Link href={`/spaces/${space.slug}`} key={space.slug}>
+            <Badge className="border-primary/20 bg-primary/5 text-primary">
+              {space.name}
+            </Badge>
+          </Link>
+        ))}
+        {question.acceptedAnswerId && (
+          <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950">
+            Best answer
+          </Badge>
+        )}
       </div>
       <Link href={`/question/${question.slug}`}>
         <h2 className="mt-3 text-[18px] font-bold leading-snug hover:text-primary sm:text-xl">
@@ -277,7 +397,7 @@ export function FeedCard({
           size="sm"
           aria-label={`${question.comments} comments`}
           onClick={() => {
-            window.location.href = `/question/${question.slug}`;
+            router.push(`/question/${question.slug}`);
           }}
         >
           <MessageCircle className="size-4" />
@@ -314,6 +434,72 @@ export function FeedCard({
           <Bookmark className={cn("size-4", bookmarked && "fill-current")} />
         </Button>
       </footer>
+      {reportOpen && (
+        <ReportDialog
+          onCancel={() => setReportOpen(false)}
+          onSubmit={reportContent}
+        />
+      )}
     </article>
+  );
+}
+
+function ReportDialog({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (reason: ReportReason, details: string) => void;
+}) {
+  const [reason, setReason] = useState<ReportReason>("OTHER");
+  const [details, setDetails] = useState("");
+  const dialogRef = useModalFocus(true, onCancel);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feed-report-title"
+        className="w-full max-w-md rounded-xl border bg-card p-5 shadow-2xl"
+      >
+        <Flag className="size-9 text-amber-500" />
+        <h2 id="feed-report-title" className="mt-4 text-lg font-bold">
+          Report content
+        </h2>
+        <label className="mt-4 block text-sm font-semibold">
+          Reason
+          <select
+            value={reason}
+            onChange={(event) => setReason(event.target.value as ReportReason)}
+            className="mt-1.5 h-10 w-full rounded-lg border bg-card px-3 text-sm font-normal"
+          >
+            {reportReasons.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-4 block text-sm font-semibold">
+          Details
+          <textarea
+            value={details}
+            onChange={(event) => setDetails(event.target.value)}
+            maxLength={2000}
+            className="mt-1.5 min-h-24 w-full rounded-lg border bg-card p-3 text-sm font-normal leading-6 outline-none focus:border-primary"
+            placeholder="Add context, links, or what moderators should review"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSubmit(reason, details)}>
+            Submit report
+          </Button>
+        </div>
+      </section>
+    </div>
   );
 }

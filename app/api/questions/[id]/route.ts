@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { assessUserText } from "@/lib/abuse";
 import { getActiveSession } from "@/lib/session";
-import { canEdit } from "@/lib/authorization";
+import { canEdit, canModerate } from "@/lib/authorization";
+import { extractMarkdownImageUrls } from "@/lib/content-images";
 import { actionError, actionSuccess } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -28,16 +30,22 @@ export async function PATCH(
   if (!editLimit.allowed) return rateLimitResponse(editLimit);
   const { id } = await params;
   const question = await prisma.question.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null, mergedIntoId: null },
     select: { id: true, authorId: true, slug: true },
   });
   if (!question)
     return NextResponse.json(actionError("NOT_FOUND", "Question not found."), {
       status: 404,
     });
-  if (!canEdit(question.authorId, session.user.id))
+  if (
+    !canEdit(question.authorId, session.user.id) &&
+    !canModerate(session.user.role)
+  )
     return NextResponse.json(
-      actionError("FORBIDDEN", "You can edit only your own question."),
+      actionError(
+        "FORBIDDEN",
+        "You can edit only your own question unless you are a moderator.",
+      ),
       { status: 403 },
     );
   const parsed = questionUpdateSchema.safeParse(await parseJson(request));
@@ -50,13 +58,26 @@ export async function PATCH(
       ),
       { status: 400 },
     );
+  const abuse = assessUserText(
+    `${parsed.data.title ?? ""}\n${parsed.data.description ?? ""}`,
+    { maxLinks: 8 },
+  );
+  if (!abuse.ok)
+    return NextResponse.json(actionError(abuse.code, abuse.message), {
+      status: 400,
+    });
   const { topics, ...fields } = parsed.data;
   if (fields.title) {
+    const requestedSlug = slugify(fields.title);
     const duplicate = await prisma.question.findFirst({
       where: {
         id: { not: question.id },
-        title: { equals: fields.title, mode: "insensitive" },
         deletedAt: null,
+        mergedIntoId: null,
+        OR: [
+          { title: { equals: fields.title, mode: "insensitive" } },
+          { slug: requestedSlug },
+        ],
       },
       select: { slug: true },
     });
@@ -116,11 +137,25 @@ export async function PATCH(
           });
         }
       }
-      return tx.question.update({
+      const updated = await tx.question.update({
         where: { id: question.id },
         data: { ...fields, ...(slug ? { slug } : {}) },
         select: { id: true, slug: true, title: true },
       });
+      if (fields.description !== undefined) {
+        const imageUrls = extractMarkdownImageUrls(fields.description);
+        if (imageUrls.length)
+          await tx.mediaAttachment.updateMany({
+            where: {
+              userId: session.user.id,
+              questionId: null,
+              answerId: null,
+              url: { in: imageUrls },
+            },
+            data: { questionId: question.id },
+          });
+      }
+      return updated;
     });
     logger.info("question.updated", {
       questionId: id,

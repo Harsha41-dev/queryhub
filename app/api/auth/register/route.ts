@@ -1,6 +1,7 @@
 import { hash } from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { trackAnalytics } from "@/lib/analytics";
 import { actionError, actionSuccess } from "@/lib/errors";
 import { issueEmailVerification } from "@/lib/email/tokens";
 import { logger } from "@/lib/logger";
@@ -45,6 +46,11 @@ export async function POST(request: Request) {
       select: { id: true, name: true, username: true, email: true },
     });
     logger.info("user.registered", { userId: user.id });
+    void trackAnalytics("signup_completed", {
+      userId: user.id,
+      request,
+      properties: { method: "credentials" },
+    });
     // verification email is best-effort; account still gets created
     try {
       await issueEmailVerification(user.id);

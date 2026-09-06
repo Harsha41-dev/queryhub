@@ -45,14 +45,14 @@ export function RegisterForm() {
     };
     if (!response.ok || !result.ok) {
       setServerError(
-        result.error?.message ?? "We couldn’t create your account.",
+        result.error?.message ?? "We could not create your account.",
       );
       return;
     }
     await signIn("credentials", {
       email: values.email,
       password: values.password,
-      callbackUrl: "/home",
+      callbackUrl: "/onboarding",
     });
   }
   return (
@@ -147,7 +147,7 @@ export function RegisterForm() {
           <Link href="/privacy" className="font-semibold text-primary">
             Privacy Policy
           </Link>
-          , and I’ll follow the community guidelines.
+          , and I will follow the community guidelines.
         </span>
       </label>
       {form.formState.errors.terms && (
@@ -162,7 +162,7 @@ export function RegisterForm() {
         disabled={form.formState.isSubmitting}
       >
         {form.formState.isSubmitting
-          ? "Creating your account…"
+          ? "Creating your account..."
           : "Create account"}
       </Button>
       <p className="text-center text-sm text-muted-foreground">

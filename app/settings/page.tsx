@@ -1,7 +1,14 @@
 // settings overview cards
 
 import Link from "next/link";
-import { Bell, ChevronRight, Lock, Palette, UserRound } from "lucide-react";
+import {
+  Bell,
+  ChevronRight,
+  GraduationCap,
+  Lock,
+  Palette,
+  UserRound,
+} from "lucide-react";
 
 const cards = [
   {
@@ -9,6 +16,12 @@ const cards = [
     title: "Public profile",
     text: "Name, bio, photo, links, and expertise",
     icon: UserRound,
+  },
+  {
+    href: "/settings/credentials",
+    title: "Answer credentials",
+    text: "Topic-specific titles shown beside your answers",
+    icon: GraduationCap,
   },
   {
     href: "/settings/account",

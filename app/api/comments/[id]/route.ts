@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/session";
+import { assessUserText } from "@/lib/abuse";
 import { canEdit } from "@/lib/authorization";
 import { actionError, actionSuccess } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -44,6 +45,11 @@ export async function PATCH(
       actionError("VALIDATION_ERROR", "Check your comment."),
       { status: 400 },
     );
+  const abuse = assessUserText(parsed.data.content, { maxLinks: 4 });
+  if (!abuse.ok)
+    return NextResponse.json(actionError(abuse.code, abuse.message), {
+      status: 400,
+    });
   const updated = await prisma.comment.update({
     where: { id },
     data: { content: parsed.data.content },
@@ -99,8 +105,8 @@ export async function DELETE(
       data: { deletedAt: new Date() },
     });
     if (deleted.count > 0)
-      await tx.answer.update({
-        where: { id: comment.answerId },
+      await tx.answer.updateMany({
+        where: { id: comment.answerId, commentCount: { gte: deleted.count } },
         data: { commentCount: { decrement: deleted.count } },
       });
     return deleted.count;

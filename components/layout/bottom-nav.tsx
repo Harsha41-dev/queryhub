@@ -3,15 +3,15 @@
 // mobile bottom navigation
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Bell, Bookmark, Home, MessageSquareText, Plus } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, Home, MessageSquareText, Plus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/answer", label: "Answer", icon: MessageSquareText },
   { href: "#ask", label: "Ask", icon: Plus, action: true },
-  { href: "/bookmarks", label: "Saved", icon: Bookmark },
+  { href: "/spaces", label: "Spaces", icon: Users },
   { href: "/notifications", label: "Updates", icon: Bell },
 ];
 
@@ -25,6 +25,7 @@ export function BottomNav({
   unread?: number;
 }) {
   const path = usePathname();
+  const router = useRouter();
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-5 border-t bg-card/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
@@ -38,7 +39,7 @@ export function BottomNav({
               onClick={
                 publicMode
                   ? () => {
-                      window.location.href = "/login";
+                      router.push("/login");
                     }
                   : onAsk
               }

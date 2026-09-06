@@ -58,17 +58,17 @@ I used separate join tables for follows and topic/question relations so that the
 - Using transactions when counters and related rows need to update together
 - Keeping deleted or hidden content out of normal user views
 - Adding rate limits to actions like login, posting, voting, search, and uploads
+- Adding answer requests, credentials, Spaces, accepted answers, and bookmark collections without breaking the existing Q&A model
+- Keeping observability and analytics provider-neutral and optional
 - Adding tests for important helpers and workflows
 - Making the repo easy to run locally with Docker
 
 ## Things I Would Improve Next
 
-- Replace simple browser confirm boxes with better confirmation dialogs
-- Add more database integration tests
-- Add better pagination for large feeds and admin tables
-- Improve search ranking and filtering
-- Add image support inside question and answer content
-- Make the moderation panel more detailed
-- Add better production logging and monitoring
+- Add more database integration coverage for the newer Spaces, answer-request, and analytics-adjacent workflows.
+- Run load tests against staging with realistic data and tune database connection limits.
+- Add production dashboards for latency, 5xx rate, email delivery failures, and storage errors.
+- Add stronger spam/abuse automation after observing real traffic patterns.
+- Add real screenshots and a short demo video after deployment.
 
 These are not blockers for a portfolio project, but they are the next practical improvements I would make.

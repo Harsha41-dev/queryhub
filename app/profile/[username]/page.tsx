@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { ProfileView } from "@/components/profile/profile-view";
 import { getProfileView } from "@/lib/query-data";
+import { seoDescription } from "@/lib/seo";
 import { getActiveSession } from "@/lib/session";
 
 export async function generateMetadata({
@@ -14,7 +15,33 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { username } = await params;
   const view = await getProfileView(username);
-  return { title: view?.person.name ?? "Profile" };
+  const description = seoDescription(
+    view?.person.bio || view?.person.headline,
+    "View this QueryHub profile.",
+  );
+  return {
+    title: view?.person.name ?? "Profile",
+    description,
+    alternates: view
+      ? { canonical: `/profile/${view.person.username}` }
+      : undefined,
+    openGraph: view
+      ? {
+          title: `${view.person.name} | QueryHub`,
+          description,
+          url: `/profile/${view.person.username}`,
+          images: view.person.avatar ? [{ url: view.person.avatar }] : [],
+        }
+      : undefined,
+    twitter: view
+      ? {
+          card: "summary",
+          title: `${view.person.name} | QueryHub`,
+          description,
+          images: view.person.avatar ? [view.person.avatar] : undefined,
+        }
+      : undefined,
+  };
 }
 
 export default async function ProfilePage({

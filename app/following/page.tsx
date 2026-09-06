@@ -8,7 +8,10 @@ import { PageHeading } from "@/components/page-heading";
 import { getFeedQuestions } from "@/lib/query-data";
 import { getActiveSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Following" };
+export const metadata: Metadata = {
+  title: "Following",
+  robots: { index: false, follow: false },
+};
 
 export default async function FollowingPage() {
   const session = await getActiveSession();

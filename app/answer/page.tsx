@@ -9,12 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { getAnswerRequests } from "@/lib/query-data";
 import { getActiveSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Answer requests" };
+export const metadata: Metadata = {
+  title: "Answer requests",
+  robots: { index: false, follow: false },
+};
 
 export default async function AnswerPage() {
   const session = await getActiveSession();
   if (!session) redirect("/login?callbackUrl=/answer");
-  const questions = await getAnswerRequests(session.user.id);
+  const queue = await getAnswerRequests(session.user.id);
   return (
     <AppShell>
       <div className="space-y-4">
@@ -23,11 +26,14 @@ export default async function AnswerPage() {
           description="Unanswered questions matched to what you know."
           action={
             <Badge className="bg-primary/10 text-primary">
-              {questions.length} requests
+              {queue.requests.length} requests
             </Badge>
           }
         />
-        <AnswerRequests questions={questions} />
+        <AnswerRequests
+          requests={queue.requests}
+          suggestions={queue.suggestions}
+        />
       </div>
     </AppShell>
   );

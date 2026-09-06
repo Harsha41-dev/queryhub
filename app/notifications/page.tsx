@@ -11,7 +11,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { getNotifications } from "@/lib/query-data";
 import { getActiveSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Notifications" };
+export const metadata: Metadata = {
+  title: "Notifications",
+  robots: { index: false, follow: false },
+};
 
 export default async function NotificationsPage() {
   const session = await getActiveSession();

@@ -22,11 +22,14 @@ enum VoteValue {
 enum NotificationType {
   NEW_FOLLOWER
   NEW_ANSWER
+  ANSWER_REQUEST
+  ACCEPTED_ANSWER
   COMMENT
   REPLY
   UPVOTE
   MENTION
   MODERATION
+  SPACE_POST
 }
 
 enum ReportReason {
@@ -54,6 +57,64 @@ enum ModerationActionType {
   ADD_NOTE
 }
 
+enum AnswerRequestStatus {
+  PENDING
+  ANSWERED
+  DISMISSED
+}
+
+enum FeedFeedbackType {
+  HIDE_QUESTION
+  MUTE_USER
+  NOT_INTERESTED_TOPIC
+}
+
+enum NotificationMuteTargetType {
+  USER
+  TOPIC
+}
+
+enum NotificationDeliveryChannel {
+  EMAIL
+  DIGEST
+  PUSH
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum SpaceRole {
+  OWNER
+  MODERATOR
+  CONTRIBUTOR
+  MEMBER
+}
+
+enum SpaceQuestionStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum SpaceInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+enum BadgeType {
+  TOP_WRITER
+  HELPFUL_ANSWER
+  TOPIC_EXPERT
+  MODERATOR
+  VERIFIED_CONTRIBUTOR
+}
+
 model User {
   id                   String                   @id @default(cuid())
   email                String                   @unique
@@ -72,6 +133,7 @@ model User {
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
   deletedAt            DateTime?
+  onboardedAt          DateTime?
   accounts             Account[]
   sessions             Session[]
   questions            Question[]
@@ -91,9 +153,26 @@ model User {
   moderatedUserActions ModerationAction[]       @relation("moderatedUser")
   media                MediaAttachment[]
   preference           UserPreference?
+  notificationMutes    NotificationMute[]
   passwordResetTokens  PasswordResetToken[]
   verificationTokens   EmailVerificationToken[]
   emailChangeTokens    EmailChangeToken[]
+  credentials          UserCredential[]
+  answerRequestsSent   AnswerRequest[]          @relation("answerRequestRequester")
+  answerRequests       AnswerRequest[]          @relation("answerRequestRecipient")
+  topicAffinities      UserTopicAffinity[]
+  questionViews        QuestionView[]
+  pushSubscriptions    PushSubscription[]
+  feedFeedback         FeedFeedback[]           @relation("feedFeedbackOwner")
+  mutedByFeedback      FeedFeedback[]           @relation("feedFeedbackAuthor")
+  ownedSpaces          Space[]                  @relation("spaceOwner")
+  spaceMemberships     SpaceMember[]
+  spaceSubmissions     SpaceQuestion[]          @relation("spaceQuestionSubmitter")
+  spaceApprovals       SpaceQuestion[]          @relation("spaceQuestionApprover")
+  spaceInvitesSent     SpaceInvite[]            @relation("spaceInviteInviter")
+  spaceInvitesReceived SpaceInvite[]            @relation("spaceInviteInvitee")
+  bookmarkCollections  BookmarkCollection[]
+  badges               UserBadge[]
   sessionVersion       Int                      @default(0)
 
   @@index([createdAt])
@@ -186,6 +265,7 @@ model Question {
   title             String             @db.VarChar(240)
   description       String?            @db.Text
   authorId          String
+  acceptedAnswerId  String?            @unique
   viewCount         Int                @default(0)
   score             Int                @default(0)
   answerCount       Int                @default(0)
@@ -194,6 +274,7 @@ model Question {
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?
   author            User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  acceptedAnswer    Answer?            @relation("acceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
   topics            QuestionTopic[]
   answers           Answer[]
   votes             Vote[]
@@ -203,12 +284,21 @@ model Question {
   media             MediaAttachment[]
   notifications     Notification[]
   moderationActions ModerationAction[]
+  answerRequests    AnswerRequest[]
+  views             QuestionView[]
+  feedFeedback      FeedFeedback[]
+  spaceLinks        SpaceQuestion[]
+  mergedIntoId      String?
+  mergedInto        Question?          @relation("QuestionMergeTargets", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedQuestions   Question[]         @relation("QuestionMergeTargets")
 
   @@index([createdAt, deletedAt])
   @@index([authorId, createdAt])
   @@index([score])
   @@index([answerCount])
   @@index([deletedAt, isHidden, createdAt])
+  @@index([deletedAt, isHidden, viewCount, score])
+  @@index([mergedIntoId])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Question_title_trgm_idx")
   @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "Question_description_trgm_idx")
 }
@@ -218,6 +308,7 @@ model Answer {
   content           String             @db.Text
   questionId        String
   authorId          String
+  credentialId      String?
   score             Int                @default(0)
   commentCount      Int                @default(0)
   isHidden          Boolean            @default(false)
@@ -225,7 +316,9 @@ model Answer {
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?
   question          Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  acceptedFor       Question?          @relation("acceptedAnswer")
   author            User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  credential        UserCredential?    @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   comments          Comment[]
   votes             Vote[]
   bookmarks         Bookmark[]
@@ -237,6 +330,7 @@ model Answer {
   @@unique([questionId, authorId])
   @@index([questionId, score])
   @@index([authorId, createdAt])
+  @@index([credentialId])
   @@index([createdAt, deletedAt])
   @@index([questionId, deletedAt, isHidden, score])
   @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "Answer_content_trgm_idx")
@@ -270,24 +364,29 @@ model Comment {
 }
 
 model Topic {
-  id                String             @id @default(cuid())
-  name              String             @unique
-  slug              String             @unique
-  description       String             @db.VarChar(1000)
+  id                String              @id @default(cuid())
+  name              String              @unique
+  slug              String              @unique
+  description       String              @db.VarChar(1000)
   image             String?
   color             String?
-  followerCount     Int                @default(0)
-  questionCount     Int                @default(0)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  followerCount     Int                 @default(0)
+  questionCount     Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   deletedAt         DateTime?
   questions         QuestionTopic[]
   followers         TopicFollow[]
   moderationActions ModerationAction[]
+  credentials       UserCredential[]
+  userAffinities    UserTopicAffinity[]
+  feedFeedback      FeedFeedback[]
+  badges            UserBadge[]
 
   @@index([followerCount])
   @@index([createdAt])
   @@index([deletedAt, followerCount])
+  @@index([deletedAt, questionCount, followerCount])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Topic_name_trgm_idx")
   @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "Topic_description_trgm_idx")
 }
@@ -359,36 +458,40 @@ model QuestionFollow {
 }
 
 model Bookmark {
-  id         String    @id @default(cuid())
-  userId     String
-  questionId String?
-  answerId   String?
-  createdAt  DateTime  @default(now())
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  answer     Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  userId       String
+  questionId   String?
+  answerId     String?
+  collectionId String?
+  createdAt    DateTime            @default(now())
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question     Question?           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer       Answer?             @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  collection   BookmarkCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 
   @@unique([userId, questionId])
   @@unique([userId, answerId])
+  @@index([collectionId])
   @@index([userId, createdAt])
 }
 
 model Notification {
-  id          String           @id @default(cuid())
+  id          String                 @id @default(cuid())
   type        NotificationType
   recipientId String
   actorId     String?
   questionId  String?
   answerId    String?
   commentId   String?
-  message     String           @db.VarChar(500)
+  message     String                 @db.VarChar(500)
   readAt      DateTime?
-  createdAt   DateTime         @default(now())
-  recipient   User             @relation("notificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  actor       User?            @relation("notificationActor", fields: [actorId], references: [id], onDelete: SetNull)
-  question    Question?        @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  answer      Answer?          @relation(fields: [answerId], references: [id], onDelete: Cascade)
-  comment     Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime               @default(now())
+  recipient   User                   @relation("notificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?                  @relation("notificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  question    Question?              @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer      Answer?                @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  comment     Comment?               @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  deliveries  NotificationDelivery[]
 
   @@index([recipientId, readAt, createdAt])
 }
@@ -416,6 +519,10 @@ model Report {
 
   @@index([status, createdAt])
   @@index([reporterId])
+  @@index([questionId, status, createdAt])
+  @@index([answerId, status, createdAt])
+  @@index([commentId, status, createdAt])
+  @@index([profileId, status, createdAt])
 }
 
 model ModerationAction {
@@ -465,20 +572,261 @@ model MediaAttachment {
 }
 
 model UserPreference {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  theme             String   @default("system")
-  profilePublic     Boolean  @default(true)
-  showActivity      Boolean  @default(true)
-  allowMessages     Boolean  @default(true)
-  emailDigest       Boolean  @default(true)
-  emailAnswers      Boolean  @default(true)
-  emailComments     Boolean  @default(true)
-  emailFollowers    Boolean  @default(false)
-  pushNotifications Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  theme                String   @default("system")
+  profilePublic        Boolean  @default(true)
+  showActivity         Boolean  @default(true)
+  allowMessages        Boolean  @default(true)
+  emailDigest          Boolean  @default(true)
+  emailAnswers         Boolean  @default(true)
+  emailAnswerRequests  Boolean  @default(true)
+  emailAcceptedAnswers Boolean  @default(true)
+  emailSpacePosts      Boolean  @default(false)
+  emailComments        Boolean  @default(true)
+  emailFollowers       Boolean  @default(false)
+  pushNotifications    Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([profilePublic])
+}
+
+model NotificationMute {
+  id         String                     @id @default(cuid())
+  userId     String
+  targetType NotificationMuteTargetType
+  targetId   String
+  createdAt  DateTime                   @default(now())
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([userId, targetType])
+  @@index([targetType, targetId])
+}
+
+model UserCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  topicId      String?
+  label        String   @db.VarChar(160)
+  organization String?  @db.VarChar(120)
+  url          String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic        Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  answers      Answer[]
+
+  @@index([userId, isDefault])
+  @@index([topicId])
+}
+
+model AnswerRequest {
+  id              String              @id @default(cuid())
+  questionId      String
+  requesterId     String
+  requestedUserId String
+  message         String?             @db.VarChar(500)
+  status          AnswerRequestStatus @default(PENDING)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  answeredAt      DateTime?
+  question        Question            @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  requester       User                @relation("answerRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  requestedUser   User                @relation("answerRequestRecipient", fields: [requestedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, requestedUserId])
+  @@index([requesterId, createdAt])
+  @@index([requestedUserId, status, createdAt])
+}
+
+model UserTopicAffinity {
+  userId           String
+  topicId          String
+  weight           Int      @default(0)
+  viewCount        Int      @default(0)
+  answerCount      Int      @default(0)
+  voteCount        Int      @default(0)
+  bookmarkCount    Int      @default(0)
+  followCount      Int      @default(0)
+  lastInteractedAt DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([userId, topicId])
+  @@index([userId, weight])
+  @@index([topicId, weight])
+  @@index([lastInteractedAt])
+}
+
+model QuestionView {
+  userId       String
+  questionId   String
+  count        Int      @default(1)
+  createdAt    DateTime @default(now())
+  lastViewedAt DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, questionId])
+  @@index([userId, lastViewedAt])
+  @@index([questionId, lastViewedAt])
+}
+
+model FeedFeedback {
+  id         String           @id @default(cuid())
+  userId     String
+  questionId String?
+  authorId   String?
+  topicId    String?
+  type       FeedFeedbackType
+  createdAt  DateTime         @default(now())
+  user       User             @relation("feedFeedbackOwner", fields: [userId], references: [id], onDelete: Cascade)
+  question   Question?        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  author     User?            @relation("feedFeedbackAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  topic      Topic?           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId, type])
+  @@unique([userId, authorId, type])
+  @@unique([userId, topicId, type])
+  @@index([userId, type])
+}
+
+model Space {
+  id                     String          @id @default(cuid())
+  name                   String          @unique
+  slug                   String          @unique
+  description            String          @db.VarChar(1000)
+  rules                  String?         @db.VarChar(2000)
+  color                  String?
+  image                  String?
+  ownerId                String
+  allowMemberSubmissions Boolean         @default(true)
+  requireApproval        Boolean         @default(true)
+  followerCount          Int             @default(0)
+  questionCount          Int             @default(0)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  deletedAt              DateTime?
+  owner                  User            @relation("spaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members                SpaceMember[]
+  questions              SpaceQuestion[]
+  invites                SpaceInvite[]
+
+  @@index([followerCount])
+  @@index([deletedAt, followerCount])
+}
+
+model SpaceMember {
+  spaceId   String
+  userId    String
+  role      SpaceRole @default(MEMBER)
+  createdAt DateTime  @default(now())
+  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+  @@index([userId, role])
+}
+
+model SpaceInvite {
+  id          String            @id @default(cuid())
+  spaceId     String
+  inviterId   String
+  inviteeId   String
+  role        SpaceRole         @default(MEMBER)
+  status      SpaceInviteStatus @default(PENDING)
+  message     String?           @db.VarChar(500)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  respondedAt DateTime?
+  space       Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  inviter     User              @relation("spaceInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee     User              @relation("spaceInviteInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, inviteeId])
+  @@index([inviteeId, status, createdAt])
+  @@index([spaceId, status, createdAt])
+}
+
+model SpaceQuestion {
+  spaceId       String
+  questionId    String
+  submittedById String
+  approvedById  String?
+  status        SpaceQuestionStatus @default(SUBMITTED)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  space         Space               @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  question      Question            @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submittedBy   User                @relation("spaceQuestionSubmitter", fields: [submittedById], references: [id], onDelete: Cascade)
+  approvedBy    User?               @relation("spaceQuestionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@id([spaceId, questionId])
+  @@index([questionId])
+  @@index([spaceId, status, createdAt])
+}
+
+model BookmarkCollection {
+  id          String     @id @default(cuid())
+  userId      String
+  name        String     @db.VarChar(80)
+  description String?    @db.VarChar(300)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookmarks   Bookmark[]
+
+  @@unique([userId, name])
+  @@index([userId, createdAt])
+}
+
+model UserBadge {
+  id          String    @id @default(cuid())
+  userId      String
+  topicId     String?
+  type        BadgeType
+  label       String    @db.VarChar(80)
+  description String    @db.VarChar(240)
+  awardedAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic       Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, type, label])
+  @@index([userId, awardedAt])
+  @@index([topicId, type])
+}
+
+model NotificationDelivery {
+  id             String                      @id @default(cuid())
+  notificationId String
+  channel        NotificationDeliveryChannel
+  status         NotificationDeliveryStatus  @default(PENDING)
+  error          String?                     @db.VarChar(500)
+  sentAt         DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  notification   Notification                @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([channel, status, createdAt])
+  @@index([notificationId, channel])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  userAgent String?  @db.VarChar(300)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
 }

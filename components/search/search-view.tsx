@@ -1,6 +1,6 @@
 "use client";
 
-// search page UI – tabs, recent searches, and results list
+// search page UI: tabs, recent searches, and results list
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -17,12 +17,13 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { FeedQuestion, PersonSummary, TopicSummary } from "@/lib/types";
+import type { SearchSuggestion } from "@/lib/types";
 import { compactNumber, contrastTextColor } from "@/lib/utils";
 
 type SearchTab = "All" | "Questions" | "Answers" | "Topics" | "People";
 const tabs: SearchTab[] = ["All", "Questions", "Answers", "Topics", "People"];
 // quick chips shown when the box is empty
-const suggestions = [
+const quickPrompts = [
   "AI product evaluation",
   "Database scaling patterns",
   "Climate technology",
@@ -39,6 +40,8 @@ type SearchResult = {
     author: FeedQuestion["author"];
     score: number;
     createdAt: string;
+    matchReason?: string;
+    matchedTerms?: string[];
   }>;
   topics: TopicSummary[];
   people: PersonSummary[];
@@ -51,13 +54,18 @@ type SearchResult = {
   };
   page: number;
   pageSize: number;
-  sort: "relevance" | "newest";
+  sort: "relevance" | "newest" | "views";
+  filter?: "all" | "unanswered";
+  topic?: string;
+  author?: string;
 };
 
 export function SearchView() {
   const params = useSearchParams();
   const router = useRouter();
   const initial = params.get("q") ?? "";
+  const initialTopic = params.get("topic") ?? "";
+  const initialAuthor = params.get("author") ?? "";
   const [query, setQuery] = useState(initial);
   const [committed, setCommitted] = useState(initial);
   const [tab, setTab] = useState<SearchTab>(parseTab(params.get("tab")));
@@ -65,10 +73,26 @@ export function SearchView() {
     const value = Number(params.get("page"));
     return Number.isInteger(value) && value > 0 ? value : 1;
   });
-  const [sort, setSort] = useState<"relevance" | "newest">(
-    params.get("sort") === "newest" ? "newest" : "relevance",
+  const [sort, setSort] = useState<"relevance" | "newest" | "views">(
+    params.get("sort") === "newest"
+      ? "newest"
+      : params.get("sort") === "views"
+        ? "views"
+        : "relevance",
+  );
+  const [filter, setFilter] = useState<"all" | "unanswered">(
+    params.get("filter") === "unanswered" ? "unanswered" : "all",
+  );
+  const [topicDraft, setTopicDraft] = useState(initialTopic);
+  const [authorDraft, setAuthorDraft] = useState(initialAuthor);
+  const [topicFilter, setTopicFilter] = useState(initialTopic.trim());
+  const [authorFilter, setAuthorFilter] = useState(
+    normalizeAuthor(initialAuthor),
   );
   const [recent, setRecent] = useState<string[]>([]);
+  const [searchSuggestions, setSearchSuggestions] = useState<
+    SearchSuggestion[]
+  >([]);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -98,13 +122,45 @@ export function SearchView() {
   useEffect(() => {
     const timer = setTimeout(() => {
       const value = query.trim();
-      setCommitted(value);
-      if (value) {
-        setLoading(true);
+      if (value.length < 2) {
+        setCommitted("");
+        setResult(null);
+        setLoading(false);
         setError("");
+        return;
       }
+      setCommitted(value);
+      setLoading(true);
+      setError("");
     }, 300);
     return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const value = query.trim();
+    if (value.length < 2) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void fetch(`/api/search/suggest?q=${encodeURIComponent(value)}`, {
+        signal: controller.signal,
+      })
+        .then((response) => response.json())
+        .then(
+          (payload: {
+            ok?: boolean;
+            data?: { suggestions: SearchSuggestion[] };
+          }) => {
+            setSearchSuggestions(payload.data?.suggestions ?? []);
+          },
+        )
+        .catch(() => undefined);
+    }, 150);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [query]);
 
   // actually run search when the committed query / page / sort changes
@@ -113,12 +169,18 @@ export function SearchView() {
       return;
     }
     const controller = new AbortController();
-    fetch(
-      `/api/search?q=${encodeURIComponent(committed)}&page=${page}&sort=${sort}`,
-      {
-        signal: controller.signal,
-      },
-    )
+    const searchParams = new URLSearchParams({
+      q: committed,
+      page: String(page),
+      sort,
+      filter,
+    });
+    if (topicFilter) searchParams.set("topic", topicFilter);
+    if (authorFilter) searchParams.set("author", authorFilter);
+
+    fetch(`/api/search?${searchParams.toString()}`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
         const payload = (await response.json()) as {
           ok: boolean;
@@ -141,10 +203,14 @@ export function SearchView() {
           return next;
         });
         // keep the URL in sync so refresh works
-        router.replace(
-          `/search?q=${encodeURIComponent(committed)}${tab !== "All" ? `&tab=${tab.toLowerCase()}` : ""}${page > 1 ? `&page=${page}` : ""}${sort === "newest" ? "&sort=newest" : ""}`,
-          { scroll: false },
-        );
+        const routeParams = new URLSearchParams({ q: committed });
+        if (tab !== "All") routeParams.set("tab", tab.toLowerCase());
+        if (page > 1) routeParams.set("page", String(page));
+        if (sort !== "relevance") routeParams.set("sort", sort);
+        if (filter !== "all") routeParams.set("filter", filter);
+        if (topicFilter) routeParams.set("topic", topicFilter);
+        if (authorFilter) routeParams.set("author", authorFilter);
+        router.replace(`/search?${routeParams.toString()}`, { scroll: false });
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -152,7 +218,7 @@ export function SearchView() {
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [committed, page, router, sort, tab]);
+  }, [authorFilter, committed, filter, page, router, sort, tab, topicFilter]);
 
   // click a suggestion / recent chip
   function select(value: string) {
@@ -160,6 +226,25 @@ export function SearchView() {
     setCommitted(value);
     setPage(1);
     setLoading(Boolean(value.trim()));
+    setError("");
+    setSearchSuggestions([]);
+  }
+
+  function applyFacets() {
+    setTopicFilter(topicDraft.trim());
+    setAuthorFilter(normalizeAuthor(authorDraft));
+    setPage(1);
+    setLoading(Boolean(committed));
+    setError("");
+  }
+
+  function clearFacets() {
+    setTopicDraft("");
+    setAuthorDraft("");
+    setTopicFilter("");
+    setAuthorFilter("");
+    setPage(1);
+    setLoading(Boolean(committed));
     setError("");
   }
 
@@ -187,6 +272,10 @@ export function SearchView() {
   const totalPages = result
     ? Math.max(1, Math.ceil(paginationCount / result.pageSize))
     : 1;
+  const facetsActive = Boolean(topicFilter || authorFilter);
+  const facetsChanged =
+    topicDraft.trim() !== topicFilter ||
+    normalizeAuthor(authorDraft) !== authorFilter;
 
   return (
     <div className="space-y-4">
@@ -198,7 +287,9 @@ export function SearchView() {
             <input
               value={query}
               onChange={(event) => {
-                setQuery(event.target.value);
+                const next = event.target.value;
+                setQuery(next);
+                if (next.trim().length < 2) setSearchSuggestions([]);
                 setPage(1);
               }}
               autoFocus
@@ -214,12 +305,33 @@ export function SearchView() {
                   setPage(1);
                   setLoading(false);
                   setError("");
+                  setSearchSuggestions([]);
                 }}
                 aria-label="Clear search"
                 className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full hover:bg-muted"
               >
                 <X className="size-4" />
               </button>
+            )}
+            {query.trim().length >= 2 && searchSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-xl border bg-card shadow-xl">
+                {searchSuggestions.map((item) => (
+                  <Link
+                    key={`${item.type}-${item.href}`}
+                    href={item.href}
+                    onClick={() => setSearchSuggestions([])}
+                    className="flex items-center gap-3 border-b px-4 py-3 text-sm last:border-0 hover:bg-muted"
+                  >
+                    <Search className="size-4 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {item.label}
+                    </span>
+                    <span className="text-[11px] font-semibold uppercase text-muted-foreground">
+                      {item.type}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -263,7 +375,7 @@ export function SearchView() {
             Try searching for
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
-            {suggestions.map((item) => (
+            {quickPrompts.map((item) => (
               <button key={item} onClick={() => select(item)}>
                 <Badge className="px-3 py-2 text-xs">{item}</Badge>
               </button>
@@ -280,6 +392,7 @@ export function SearchView() {
                   onClick={() => {
                     setTab(item);
                     setPage(1);
+                    setLoading(Boolean(committed));
                   }}
                   className={`relative h-12 px-4 text-sm font-semibold ${tab === item ? "text-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary" : "text-muted-foreground"}`}
                 >
@@ -292,23 +405,94 @@ export function SearchView() {
                 {loading ? "Searching..." : `${count} results for `}
                 <strong className="text-foreground">{committed}</strong>
               </span>
-              <label className="flex items-center gap-2">
-                <span>Sort</span>
-                <select
-                  value={sort}
-                  onChange={(event) => {
-                    setSort(
-                      event.target.value === "newest" ? "newest" : "relevance",
-                    );
-                    setPage(1);
-                  }}
-                  className="h-8 rounded-md border bg-card px-2 text-xs font-semibold text-foreground"
-                >
-                  <option value="relevance">Relevance</option>
-                  <option value="newest">Newest</option>
-                </select>
-              </label>
+              <div className="flex flex-wrap gap-2">
+                <label className="flex items-center gap-2">
+                  <span>Filter</span>
+                  <select
+                    value={filter}
+                    onChange={(event) => {
+                      setFilter(
+                        event.target.value === "unanswered"
+                          ? "unanswered"
+                          : "all",
+                      );
+                      setPage(1);
+                      setLoading(Boolean(committed));
+                    }}
+                    className="h-8 rounded-md border bg-card px-2 text-xs font-semibold text-foreground"
+                  >
+                    <option value="all">All</option>
+                    <option value="unanswered">Unanswered</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2">
+                  <span>Sort</span>
+                  <select
+                    value={sort}
+                    onChange={(event) => {
+                      setSort(
+                        event.target.value === "newest"
+                          ? "newest"
+                          : event.target.value === "views"
+                            ? "views"
+                            : "relevance",
+                      );
+                      setPage(1);
+                      setLoading(Boolean(committed));
+                    }}
+                    className="h-8 rounded-md border bg-card px-2 text-xs font-semibold text-foreground"
+                  >
+                    <option value="relevance">Relevance</option>
+                    <option value="newest">Newest</option>
+                    <option value="views">Most viewed</option>
+                  </select>
+                </label>
+              </div>
             </div>
+            <div className="flex flex-wrap items-end gap-2 border-t px-5 py-3 text-xs text-muted-foreground">
+              <label className="flex min-w-[11rem] flex-1 flex-col gap-1 sm:max-w-[15rem]">
+                <span>Topic</span>
+                <input
+                  value={topicDraft}
+                  onChange={(event) => setTopicDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") applyFacets();
+                  }}
+                  placeholder="Any topic"
+                  className="h-8 rounded-md border bg-card px-2 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </label>
+              <label className="flex min-w-[11rem] flex-1 flex-col gap-1 sm:max-w-[15rem]">
+                <span>Author</span>
+                <input
+                  value={authorDraft}
+                  onChange={(event) => setAuthorDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") applyFacets();
+                  }}
+                  placeholder="Name or username"
+                  className="h-8 rounded-md border bg-card px-2 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </label>
+              <Button
+                size="sm"
+                onClick={applyFacets}
+                disabled={!committed || !facetsChanged}
+              >
+                Apply
+              </Button>
+              {facetsActive && (
+                <Button variant="ghost" size="sm" onClick={clearFacets}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            {facetsActive && (
+              <div className="flex flex-wrap gap-2 border-t px-5 pb-3 text-xs">
+                {topicFilter && <Badge>Topic: {topicFilter}</Badge>}
+                {authorFilter && <Badge>Author: {authorFilter}</Badge>}
+              </div>
+            )}
           </section>
           {error && (
             <section className="border-y bg-card p-5 text-sm text-destructive sm:rounded-xl sm:border">
@@ -399,6 +583,11 @@ function QuestionResult({
           <Highlight text={item.title} query={query} />
         </h2>
       </Link>
+      {item.matchReason && (
+        <Badge className="mt-2 border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950">
+          {item.matchReason}
+        </Badge>
+      )}
       <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
         <Highlight text={item.answer} query={query} />
       </p>
@@ -433,6 +622,11 @@ function AnswerResult({
       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
         <Highlight text={item.content} query={query} />
       </p>
+      {item.matchReason && (
+        <Badge className="mt-2 border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950">
+          {item.matchReason}
+        </Badge>
+      )}
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Avatar
           src={item.author.avatar}
@@ -501,12 +695,24 @@ function PersonResult({ item, query }: { item: PersonSummary; query: string }) {
 
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const terms = [
+    query,
+    ...query
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((term) => term.length > 2),
+  ];
+  const escaped = [...new Set(terms)]
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  if (!escaped) return text;
   const parts = text.split(new RegExp(`(${escaped})`, "gi"));
   return (
     <>
       {parts.map((part, index) =>
-        part.toLowerCase() === query.toLowerCase() ? (
+        terms.some((term) => part.toLowerCase() === term.toLowerCase()) ? (
           <mark
             key={`${part}-${index}`}
             className="rounded bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-500/30"
@@ -546,4 +752,8 @@ function parseTab(value: string | null): SearchTab {
     default:
       return "All";
   }
+}
+
+function normalizeAuthor(value: string) {
+  return value.trim().replace(/^@+/, "");
 }

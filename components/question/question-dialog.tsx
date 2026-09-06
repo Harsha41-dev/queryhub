@@ -1,11 +1,21 @@
 "use client";
 
-// "Ask a question" modal – two steps: write question, pick topics
+// "Ask a question" modal: write question and pick topics.
 
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronLeft, Lightbulb, Plus, Search, X } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  ChevronLeft,
+  Image as ImageIcon,
+  Lightbulb,
+  Plus,
+  Search,
+  Tags,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -31,15 +41,19 @@ export function QuestionDialog({
   const [step, setStep] = useState<1 | 2>(1);
   const [topicSearch, setTopicSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [topicOptions, setTopicOptions] = useState<TopicSummary[]>([]);
   const [duplicates, setDuplicates] = useState<
-    Array<{ id: string; slug: string; title: string }>
+    Array<{ id: string; slug: string; title: string; score?: number }>
   >([]);
+  const [serverWarnings, setServerWarnings] = useState<string[]>([]);
   const form = useForm<QuestionInput>({
     resolver: zodResolver(questionSchema),
     defaultValues: { title: "", description: "", topics: [] },
   });
   const title = useWatch({ control: form.control, name: "title" }) ?? "";
+  const description =
+    useWatch({ control: form.control, name: "description" }) ?? "";
   const selectedTopics =
     useWatch({ control: form.control, name: "topics" }) ?? [];
   const draftValues = useWatch({ control: form.control });
@@ -81,7 +95,8 @@ export function QuestionDialog({
 
   // after a short pause, look for similar questions
   useEffect(() => {
-    if (!open || title.trim().length < 8) return;
+    if (!open) return;
+    if (title.trim().length < 8) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetch(`/api/questions?q=${encodeURIComponent(title.trim())}`, {
@@ -92,11 +107,19 @@ export function QuestionDialog({
           (payload: {
             ok?: boolean;
             data?: {
-              suggestions: Array<{ id: string; slug: string; title: string }>;
+              suggestions: Array<{
+                id: string;
+                slug: string;
+                title: string;
+                score?: number;
+              }>;
+              qualityWarnings?: string[];
             };
           }) => {
-            if (payload.ok && payload.data)
+            if (payload.ok && payload.data) {
               setDuplicates(payload.data.suggestions.slice(0, 3));
+              setServerWarnings(payload.data.qualityWarnings ?? []);
+            }
           },
         )
         .catch(() => undefined);
@@ -107,11 +130,31 @@ export function QuestionDialog({
     };
   }, [open, title]);
 
-  const shownDuplicates = title.trim().length >= 8 ? duplicates : [];
+  const readyForQualityCheck = title.trim().length >= 8;
+  const shownDuplicates = readyForQualityCheck ? duplicates : [];
 
   const filteredTopics = topicOptions.filter((topic) =>
     topic.name.toLowerCase().includes(topicSearch.toLowerCase()),
   );
+  const questionText = `${title} ${description}`.toLowerCase();
+  const suggestedTopics = topicOptions
+    .filter(
+      (topic) =>
+        !selectedTopics.includes(topic.name) &&
+        topic.name
+          .toLowerCase()
+          .split(/\s+/)
+          .some((word) => word.length > 2 && questionText.includes(word)),
+    )
+    .slice(0, 5);
+  const qualityWarnings = [
+    ...(readyForQualityCheck ? serverWarnings : []),
+    title.toLowerCase().startsWith("how") &&
+      description.trim().length < 40 &&
+      "Add context so answers can match your situation.",
+  ]
+    .filter((item): item is string => Boolean(item))
+    .filter((item, index, list) => list.indexOf(item) === index);
 
   function toggleTopic(topic: string) {
     if (selectedTopics.includes(topic))
@@ -124,6 +167,46 @@ export function QuestionDialog({
       form.setValue("topics", [...selectedTopics, topic], {
         shouldValidate: true,
       });
+  }
+
+  async function uploadImage(file?: File) {
+    if (!file) return;
+    if (publicMode) {
+      onClose();
+      router.push(`/login?callbackUrl=${encodeURIComponent("/home")}`);
+      return;
+    }
+    setUploading(true);
+    const payload = new FormData();
+    payload.set("image", file);
+    try {
+      const response = await fetch("/api/uploads/content", {
+        method: "POST",
+        body: payload,
+      });
+      const result = (await response.json()) as {
+        ok: boolean;
+        data?: { markdown: string };
+        error?: { message: string };
+      };
+      if (!response.ok || !result.ok || !result.data)
+        throw new Error(result.error?.message ?? "Image could not upload");
+      const current = form.getValues("description") ?? "";
+      form.setValue(
+        "description",
+        current.trim()
+          ? `${current.trimEnd()}\n\n${result.data.markdown}\n`
+          : `${result.data.markdown}\n`,
+        { shouldDirty: true, shouldValidate: true },
+      );
+      toast.success("Image added to question");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Image could not upload",
+      );
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function submit(values: QuestionInput) {
@@ -150,7 +233,7 @@ export function QuestionDialog({
         );
       localStorage.removeItem(DRAFT_KEY);
       toast.success("Your question is live", {
-        description: "We’ll notify you when someone answers.",
+        description: "We will notify you when someone answers.",
       });
       form.reset();
       onClose();
@@ -225,7 +308,7 @@ export function QuestionDialog({
                     </div>
                   </div>
                 </div>
-                <label className="block">
+                <div className="block">
                   <span className="mb-2 flex justify-between text-sm font-semibold">
                     <span>Question</span>
                     <span className="font-normal text-muted-foreground">
@@ -249,7 +332,19 @@ export function QuestionDialog({
                       {form.formState.errors.title.message}
                     </span>
                   )}
-                </label>
+                </div>
+                {qualityWarnings.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                    <div className="flex gap-2">
+                      <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                      <div className="space-y-1 text-xs leading-5">
+                        {qualityWarnings.map((warning) => (
+                          <p key={warning}>{warning}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {shownDuplicates.length > 0 && (
                   <div className="rounded-xl border p-3">
                     <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -263,12 +358,17 @@ export function QuestionDialog({
                           className="block py-2 text-sm font-medium hover:text-primary"
                         >
                           {item.title}
+                          {item.score !== undefined && (
+                            <span className="ml-2 text-[11px] font-semibold text-muted-foreground">
+                              {Math.round(item.score * 100)}% similar
+                            </span>
+                          )}
                         </a>
                       ))}
                     </div>
                   </div>
                 )}
-                <label className="block">
+                <div className="block">
                   <span className="mb-2 block text-sm font-semibold">
                     Context{" "}
                     <span className="font-normal text-muted-foreground">
@@ -276,12 +376,58 @@ export function QuestionDialog({
                     </span>
                   </span>
                   <Textarea
+                    aria-label="Question context"
                     rows={5}
                     maxLength={5000}
-                    placeholder="Share what you already know or why you’re asking…"
+                    placeholder="Share what you already know or why you're asking..."
                     {...form.register("description")}
                   />
-                </label>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {description.length}/5000
+                    </span>
+                    <label>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        disabled={uploading || submitting}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.currentTarget.value = "";
+                          void uploadImage(file);
+                        }}
+                      />
+                      <span
+                        aria-disabled={uploading || submitting}
+                        className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-xs font-semibold hover:bg-muted aria-disabled:cursor-wait aria-disabled:opacity-60"
+                      >
+                        <ImageIcon className="size-4" />
+                        {uploading ? "Uploading..." : "Add image"}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+                {suggestedTopics.length > 0 && (
+                  <div className="rounded-xl border p-3">
+                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      <Tags className="size-3.5" />
+                      Suggested topics
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {suggestedTopics.map((topic) => (
+                        <button
+                          key={topic.id ?? topic.slug}
+                          type="button"
+                          onClick={() => toggleTopic(topic.name)}
+                          className="rounded-full border px-3 py-1.5 text-xs font-semibold hover:border-primary hover:text-primary"
+                        >
+                          {topic.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -382,10 +528,12 @@ export function QuestionDialog({
             ) : (
               <Button
                 type="submit"
-                disabled={submitting || selectedTopics.length === 0}
+                disabled={
+                  submitting || uploading || selectedTopics.length === 0
+                }
               >
                 {submitting
-                  ? "Publishing…"
+                  ? "Publishing..."
                   : publicMode
                     ? "Sign in to publish"
                     : "Publish question"}

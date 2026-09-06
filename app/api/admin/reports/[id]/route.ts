@@ -210,6 +210,21 @@ export async function PATCH(
     return updated;
   });
   return NextResponse.json(
-    actionSuccess({ id: result.id, status: result.status }),
+    actionSuccess({ id: result.id, status: reportStatusLabel(result.status) }),
   );
+}
+
+function reportStatusLabel(
+  status: "PENDING" | "REVIEWING" | "DISMISSED" | "ACTIONED",
+) {
+  switch (status) {
+    case "PENDING":
+      return "Pending";
+    case "REVIEWING":
+      return "Reviewing";
+    case "DISMISSED":
+      return "Dismissed";
+    case "ACTIONED":
+      return "Actioned";
+  }
 }

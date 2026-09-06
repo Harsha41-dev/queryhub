@@ -1,6 +1,9 @@
 import {
   PrismaClient,
+  BadgeType,
   Role,
+  SpaceQuestionStatus,
+  SpaceRole,
   VoteValue,
   NotificationType,
   ReportReason,
@@ -218,10 +221,31 @@ const answerBodies = [
   "Start by making the decision explicit. Teams often jump to tools before agreeing on the outcome, the constraints, and the evidence that would change their mind. A useful process names those three things, runs the smallest credible test, and records what was learned. That makes the result reusable rather than anecdotal.",
   "The most reliable pattern I have seen is progressive commitment. Begin with a reversible step, instrument it well, and increase scope only after the failure modes are understood. This protects learning speed without pretending risk has disappeared. It also creates natural checkpoints for the people affected by the decision.",
   "Context matters more than a universal checklist, but three questions travel well: who bears the downside, how quickly will we notice a mistake, and can the change be reversed? When teams answer those honestly, the right design is usually much less mysterious. The hard part is preserving that honesty under schedule pressure.",
-  "Good practice is often operational rather than glamorous. Define ownership, keep the feedback loop short, and make exceptions visible. In mature teams, a surprising result becomes a prompt to update the system—not a reason to blame the person closest to the incident. That is how local lessons become institutional knowledge.",
+  "Good practice is often operational rather than glamorous. Define ownership, keep the feedback loop short, and make exceptions visible. In mature teams, a surprising result becomes a prompt to update the system, not a reason to blame the person closest to the incident. That is how local lessons become institutional knowledge.",
   "I would separate the leading signal from the final outcome. The outcome tells you whether the work mattered; the leading signal tells you soon enough to respond. Use both, and add a qualitative review so the numbers do not silently redefine the goal. Metrics are strongest when they support judgment instead of replacing it.",
   "A practical first step is to observe the current behavior before proposing a solution. People already have workarounds, informal rules, and signals that the formal process misses. Map those carefully. The best intervention usually preserves what is working while removing one important source of friction at a time.",
 ];
+
+const spaceSeeds = [
+  [
+    "AI Builders",
+    "ai-builders",
+    "A practical community for people designing, evaluating, and shipping AI products.",
+    "#4f46e5",
+  ],
+  [
+    "Career Advice India",
+    "career-advice-india",
+    "Career questions with context for students, early professionals, and working teams in India.",
+    "#059669",
+  ],
+  [
+    "Startup Founders",
+    "startup-founders",
+    "Hard-won lessons about product decisions, pricing, hiring, and resilient company building.",
+    "#d97706",
+  ],
+] as const;
 
 function slugify(value: string) {
   return value
@@ -231,16 +255,33 @@ function slugify(value: string) {
 }
 
 async function main() {
+  if (
+    process.env.APP_ENV === "production" &&
+    process.env.ALLOW_PRODUCTION_SEED !== "true"
+  ) {
+    throw new Error(
+      "Refusing to seed production. Set ALLOW_PRODUCTION_SEED=true only for a disposable database.",
+    );
+  }
+
   await prisma.moderationAction.deleteMany();
   await prisma.report.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.bookmark.deleteMany();
+  await prisma.bookmarkCollection.deleteMany();
+  await prisma.spaceQuestion.deleteMany();
+  await prisma.spaceMember.deleteMany();
+  await prisma.space.deleteMany();
+  await prisma.feedFeedback.deleteMany();
+  await prisma.answerRequest.deleteMany();
+  await prisma.userBadge.deleteMany();
   await prisma.questionFollow.deleteMany();
   await prisma.topicFollow.deleteMany();
   await prisma.userFollow.deleteMany();
   await prisma.vote.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.answer.deleteMany();
+  await prisma.userCredential.deleteMany();
   await prisma.questionTopic.deleteMany();
   await prisma.question.deleteMany();
   await prisma.topic.deleteMany();
@@ -253,7 +294,7 @@ async function main() {
   await prisma.user.deleteMany();
 
   const passwordHash = await hash("DemoPass123!", 12);
-  const users = [];
+  const users: Array<{ id: string }> = [];
   for (let index = 0; index < userSeeds.length; index += 1) {
     const [name, username, email, bio] = userSeeds[index];
     users.push(
@@ -279,7 +320,7 @@ async function main() {
     );
   }
 
-  const topics = [];
+  const topics: Array<{ id: string }> = [];
   for (const [name, slug, description, color] of topicSeeds)
     topics.push(
       await prisma.topic.create({
@@ -294,8 +335,57 @@ async function main() {
       }),
     );
 
-  const questions = [];
-  const answers = [];
+  const credentials: Array<{ id: string }> = [];
+  for (let index = 0; index < users.length; index += 1) {
+    credentials.push(
+      await prisma.userCredential.create({
+        data: {
+          userId: users[index].id,
+          topicId: topics[index % topics.length].id,
+          label: userSeeds[index][3],
+          organization:
+            index === 1
+              ? "QueryHub"
+              : index === 2
+                ? "Community Safety"
+                : undefined,
+          isDefault: true,
+        },
+      }),
+    );
+  }
+
+  await prisma.userBadge.createMany({
+    data: [
+      {
+        userId: users[1].id,
+        type: BadgeType.MODERATOR,
+        label: "Admin",
+        description: "Can manage topics, reports, users, and platform safety.",
+      },
+      {
+        userId: users[2].id,
+        type: BadgeType.MODERATOR,
+        label: "Moderator",
+        description: "Helps review reports and keep discussions useful.",
+      },
+      {
+        userId: users[0].id,
+        type: BadgeType.TOP_WRITER,
+        label: "Top Writer",
+        description: "Consistently writes answers the community finds useful.",
+      },
+      {
+        userId: users[4].id,
+        type: BadgeType.TOPIC_EXPERT,
+        label: "Software Engineering Expert",
+        description: "Frequently answers software engineering questions.",
+      },
+    ],
+  });
+
+  const questions: Array<{ id: string; authorId: string }> = [];
+  const answers: Array<{ id: string; authorId: string }> = [];
   for (let index = 0; index < questionTitles.length; index += 1) {
     const question = await prisma.question.create({
       data: {
@@ -322,7 +412,9 @@ async function main() {
         data: {
           questionId: question.id,
           authorId: users[(index + answerIndex + 1) % users.length].id,
-          content: `${answerBodies[(index + answerIndex) % answerBodies.length]}\n\nFor “${questionTitles[index]}”, that means testing the advice against the people and constraints in the actual situation, then documenting what changes.`,
+          credentialId:
+            credentials[(index + answerIndex + 1) % credentials.length].id,
+          content: `${answerBodies[(index + answerIndex) % answerBodies.length]}\n\nFor "${questionTitles[index]}", that means testing the advice against the people and constraints in the actual situation, then documenting what changes.`,
           score: 15 + (((index + answerIndex) * 29) % 450),
           commentCount: 2,
           createdAt: new Date(
@@ -351,6 +443,60 @@ async function main() {
         },
       });
     }
+  }
+
+  for (let index = 0; index < questions.length; index += 3) {
+    const accepted = answers[index * 2];
+    if (!accepted) continue;
+    await prisma.question.update({
+      where: { id: questions[index].id },
+      data: { acceptedAnswerId: accepted.id },
+    });
+    await prisma.user.update({
+      where: { id: accepted.authorId },
+      data: { reputation: { increment: 25 } },
+    });
+  }
+
+  const spaces: Array<{ id: string }> = [];
+  for (let index = 0; index < spaceSeeds.length; index += 1) {
+    const [name, slug, description, color] = spaceSeeds[index];
+    const space = await prisma.space.create({
+      data: {
+        name,
+        slug,
+        description,
+        color,
+        ownerId: users[1].id,
+        followerCount: 2400 + index * 1700,
+      },
+    });
+    spaces.push(space);
+    await prisma.spaceMember.createMany({
+      data: [
+        { spaceId: space.id, userId: users[1].id, role: SpaceRole.OWNER },
+        { spaceId: space.id, userId: users[2].id, role: SpaceRole.MODERATOR },
+        {
+          spaceId: space.id,
+          userId: users[(index + 4) % users.length].id,
+          role: SpaceRole.CONTRIBUTOR,
+        },
+      ],
+    });
+    const linked = questions.slice(index * 5, index * 5 + 5);
+    await prisma.spaceQuestion.createMany({
+      data: linked.map((question) => ({
+        spaceId: space.id,
+        questionId: question.id,
+        submittedById: question.authorId,
+        approvedById: users[1].id,
+        status: SpaceQuestionStatus.APPROVED,
+      })),
+    });
+    await prisma.space.update({
+      where: { id: space.id },
+      data: { questionCount: linked.length },
+    });
   }
 
   for (let index = 0; index < questions.length; index += 1) {
@@ -408,6 +554,41 @@ async function main() {
       },
     });
 
+  for (let index = 0; index < 4; index += 1) {
+    const collection = await prisma.bookmarkCollection.create({
+      data: {
+        userId: users[index].id,
+        name: ["Interview prep", "AI notes", "Career ideas", "Research queue"][
+          index
+        ],
+        description: "A focused library of saved QueryHub answers.",
+      },
+    });
+    await prisma.bookmark.updateMany({
+      where: { userId: users[index].id },
+      data: { collectionId: collection.id },
+    });
+  }
+
+  for (let index = 0; index < 12; index += 1) {
+    const requestedUser = users[(index + 3) % users.length];
+    await prisma.answerRequest.upsert({
+      where: {
+        questionId_requestedUserId: {
+          questionId: questions[index].id,
+          requestedUserId: requestedUser.id,
+        },
+      },
+      create: {
+        questionId: questions[index].id,
+        requesterId: users[index % users.length].id,
+        requestedUserId: requestedUser.id,
+        message: "Your experience would make this answer especially useful.",
+      },
+      update: {},
+    });
+  }
+
   for (let index = 0; index < 20; index += 1)
     await prisma.notification.create({
       data: {
@@ -428,6 +609,17 @@ async function main() {
         ][index % 4],
         readAt: index > 8 ? new Date() : null,
         createdAt: new Date(Date.now() - index * 45 * 60 * 1000),
+      },
+    });
+  for (let index = 0; index < 8; index += 1)
+    await prisma.notification.create({
+      data: {
+        recipientId: users[(index + 3) % users.length].id,
+        actorId: users[index % users.length].id,
+        questionId: questions[index].id,
+        type: NotificationType.ANSWER_REQUEST,
+        message: "requested your answer",
+        createdAt: new Date(Date.now() - index * 35 * 60 * 1000),
       },
     });
   for (let index = 0; index < 8; index += 1)

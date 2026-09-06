@@ -1,15 +1,17 @@
 "use client";
 
-// user profile page – header, follow button, answers/questions tabs
+// user profile page: header, follow button, answers/questions tabs
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Award,
   CalendarDays,
   Check,
   ExternalLink,
   Flag,
+  GraduationCap,
   Link as LinkIcon,
   MapPin,
   Pencil,
@@ -21,8 +23,26 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FeedCard } from "@/components/feed/feed-card";
+import { useModalFocus } from "@/components/ui/use-modal-focus";
 import type { FeedQuestion, PersonSummary } from "@/lib/types";
 import { compactNumber, relativeDate } from "@/lib/utils";
+
+type ReportReason =
+  | "SPAM"
+  | "HARASSMENT"
+  | "MISINFORMATION"
+  | "HATE_ABUSE"
+  | "COPYRIGHT"
+  | "OTHER";
+
+const reportReasons: Array<{ value: ReportReason; label: string }> = [
+  { value: "SPAM", label: "Spam" },
+  { value: "HARASSMENT", label: "Harassment" },
+  { value: "MISINFORMATION", label: "Misinformation" },
+  { value: "HATE_ABUSE", label: "Hate or abusive content" },
+  { value: "COPYRIGHT", label: "Copyright issue" },
+  { value: "OTHER", label: "Other" },
+];
 
 export function ProfileView({
   person,
@@ -37,13 +57,15 @@ export function ProfileView({
   answers: FeedQuestion[];
   publicMode?: boolean;
 }) {
+  const router = useRouter();
   const [following, setFollowing] = useState(person.following ?? false);
   const [tab, setTab] = useState("Answers");
+  const [reportOpen, setReportOpen] = useState(false);
 
   // follow / unfollow this user
   function follow() {
     if (publicMode) {
-      window.location.href = "/login";
+      router.push("/login");
       return;
     }
     void (async () => {
@@ -69,16 +91,25 @@ export function ProfileView({
   }
 
   // report a profile to moderators
-  async function reportProfile() {
+  async function reportProfile(reason: ReportReason, details: string) {
     if (publicMode) {
-      window.location.href = "/login";
+      router.push("/login");
+      return;
+    }
+    if (!person.id) {
+      toast.error("Profile could not be reported");
       return;
     }
     const response = await fetch("/api/reports", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ profileId: person.id, reason: "OTHER" }),
+      body: JSON.stringify({
+        profileId: person.id,
+        reason,
+        details: details || undefined,
+      }),
     });
+    if (response.ok) setReportOpen(false);
     toast[response.ok ? "success" : "error"](
       response.ok
         ? "Profile report submitted for review"
@@ -90,6 +121,8 @@ export function ProfileView({
     { label: "Answers", value: person.answers },
     { label: "Questions", value: person.questions ?? questions.length },
     { label: "Reputation", value: person.reputation ?? 0 },
+    { label: "Best answers", value: person.acceptedAnswers ?? 0 },
+    { label: "Views", value: person.profileViews ?? 0 },
     { label: "Followers", value: person.followers },
   ];
 
@@ -106,13 +139,22 @@ export function ProfileView({
             />
             <div className="mb-1 ml-auto flex gap-2">
               {ownProfile ? (
-                <Link
-                  href="/settings/profile"
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border bg-card px-4 text-sm font-semibold hover:bg-muted"
-                >
-                  <Pencil className="size-4" />
-                  Edit profile
-                </Link>
+                <>
+                  <Link
+                    href="/settings/profile"
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border bg-card px-4 text-sm font-semibold hover:bg-muted"
+                  >
+                    <Pencil className="size-4" />
+                    Edit profile
+                  </Link>
+                  <Link
+                    href="/settings/credentials"
+                    className="hidden h-10 items-center gap-2 rounded-lg border bg-card px-4 text-sm font-semibold hover:bg-muted sm:inline-flex"
+                  >
+                    <GraduationCap className="size-4" />
+                    Credentials
+                  </Link>
+                </>
               ) : (
                 <Button onClick={follow}>
                   {following ? (
@@ -135,7 +177,9 @@ export function ProfileView({
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={reportProfile}
+                  onClick={() =>
+                    publicMode ? router.push("/login") : setReportOpen(true)
+                  }
                   aria-label="Report profile"
                 >
                   <Flag className="size-4" />
@@ -160,6 +204,19 @@ export function ProfileView({
             <p className="mt-0.5 text-sm text-muted-foreground">
               @{person.username}
             </p>
+            {person.badges && person.badges.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {person.badges.map((badge) => (
+                  <Badge
+                    key={badge}
+                    className="border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950"
+                  >
+                    <Award className="size-3" />
+                    {badge}
+                  </Badge>
+                ))}
+              </div>
+            )}
             {person.occupation && (
               <p className="mt-1 text-sm font-semibold text-muted-foreground">
                 {person.occupation}
@@ -181,7 +238,7 @@ export function ProfileView({
                   <a
                     href={person.website}
                     className="font-semibold text-primary"
-                    rel="noreferrer"
+                    rel="nofollow noopener noreferrer"
                     target="_blank"
                   >
                     {person.website.replace(/^https?:\/\//, "")}
@@ -279,11 +336,37 @@ export function ProfileView({
                 detail={`${compactNumber(person.answers)} published answers`}
               />
               <Credibility
+                label="Best answers"
+                detail={`${compactNumber(person.acceptedAnswers ?? 0)} selected by question authors`}
+              />
+              <Credibility
+                label="Views"
+                detail={`${compactNumber(person.profileViews ?? 0)} views on published questions`}
+              />
+              <Credibility
                 label="Followers"
                 detail={`${compactNumber(person.followers)} people follow this profile`}
               />
             </div>
           </section>
+          {person.credentials && person.credentials.length > 0 && (
+            <section className="rounded-xl border bg-card p-4">
+              <h2 className="text-sm font-bold">Credentials</h2>
+              <div className="mt-3 space-y-3">
+                {person.credentials.map((credential) => (
+                  <div key={credential.id}>
+                    <p className="text-xs font-semibold">{credential.label}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {credential.topic?.name ?? "All topics"}
+                      {credential.organization
+                        ? ` - ${credential.organization}`
+                        : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <section className="rounded-xl border bg-card p-4">
             <h2 className="text-sm font-bold">Knows about</h2>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -300,6 +383,72 @@ export function ProfileView({
           </section>
         </aside>
       </div>
+      {reportOpen && (
+        <ProfileReportDialog
+          onCancel={() => setReportOpen(false)}
+          onSubmit={reportProfile}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProfileReportDialog({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (reason: ReportReason, details: string) => void;
+}) {
+  const [reason, setReason] = useState<ReportReason>("OTHER");
+  const [details, setDetails] = useState("");
+  const dialogRef = useModalFocus(true, onCancel);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-report-title"
+        className="w-full max-w-md rounded-xl border bg-card p-5 shadow-2xl"
+      >
+        <Flag className="size-9 text-amber-500" />
+        <h2 id="profile-report-title" className="mt-4 text-lg font-bold">
+          Report profile
+        </h2>
+        <label className="mt-4 block text-sm font-semibold">
+          Reason
+          <select
+            value={reason}
+            onChange={(event) => setReason(event.target.value as ReportReason)}
+            className="mt-1.5 h-10 w-full rounded-lg border bg-card px-3 text-sm font-normal"
+          >
+            {reportReasons.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-4 block text-sm font-semibold">
+          Details
+          <textarea
+            value={details}
+            onChange={(event) => setDetails(event.target.value)}
+            maxLength={2000}
+            className="mt-1.5 min-h-24 w-full rounded-lg border bg-card p-3 text-sm font-normal leading-6 outline-none focus:border-primary"
+            placeholder="Add context, links, or what moderators should review"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSubmit(reason, details)}>
+            Submit report
+          </Button>
+        </div>
+      </section>
     </div>
   );
 }

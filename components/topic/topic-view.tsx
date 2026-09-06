@@ -1,9 +1,10 @@
 "use client";
 
-// topic page – questions under this topic + follow toggle
+// topic page: questions under this topic and follow toggle
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BellPlus, Check, ShieldCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
@@ -26,13 +27,14 @@ export function TopicView({
   contributors: Array<FeedAuthor & { answers: number }>;
   publicMode?: boolean;
 }) {
+  const router = useRouter();
   const [following, setFollowing] = useState(topic.followed ?? false);
   const [tab, setTab] = useState("Recent");
 
   // optimistic follow, then hit the API
   function follow() {
     if (publicMode) {
-      window.location.href = "/login";
+      router.push("/login");
       return;
     }
     void (async () => {

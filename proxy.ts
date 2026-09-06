@@ -1,5 +1,10 @@
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  isMutationOriginAllowed,
+  isUnsafeMethod,
+  originFromUrl,
+} from "@/lib/security";
 
 const protectedPrefixes = [
   "/home",
@@ -23,6 +28,36 @@ export default async function proxy(request: NextRequest) {
   requestHeaders.set("x-request-id", requestId);
 
   const pathname = request.nextUrl.pathname;
+  if (
+    pathname.startsWith("/api/") &&
+    isUnsafeMethod(request.method) &&
+    !isMutationOriginAllowed({
+      method: request.method,
+      requestUrl: request.url,
+      origin: request.headers.get("origin"),
+      host: request.headers.get("host"),
+      forwardedProto: request.headers.get("x-forwarded-proto"),
+      secFetchSite: request.headers.get("sec-fetch-site"),
+      allowedOrigins: [
+        originFromUrl(process.env.APP_URL),
+        originFromUrl(process.env.NEXTAUTH_URL),
+      ],
+    })
+  )
+    return withRequestId(
+      NextResponse.json(
+        {
+          ok: false,
+          error: {
+            code: "BAD_ORIGIN",
+            message: "Request origin is not allowed.",
+          },
+        },
+        { status: 403 },
+      ),
+      requestId,
+    );
+
   const protectedRoute = protectedPrefixes.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { assessUserText } from "@/lib/abuse";
 import { getActiveSession } from "@/lib/session";
 import { canEdit } from "@/lib/authorization";
+import { extractMarkdownImageUrls } from "@/lib/content-images";
 import { actionError, actionSuccess } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -51,11 +53,30 @@ export async function PATCH(
       ),
       { status: 400 },
     );
+  const abuse = assessUserText(parsed.data.content, { maxLinks: 12 });
+  if (!abuse.ok)
+    return NextResponse.json(actionError(abuse.code, abuse.message), {
+      status: 400,
+    });
 
-  const updated = await prisma.answer.update({
-    where: { id },
-    data: { content: parsed.data.content },
-    select: { id: true, content: true, updatedAt: true },
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.answer.update({
+      where: { id },
+      data: { content: parsed.data.content },
+      select: { id: true, content: true, updatedAt: true },
+    });
+    const imageUrls = extractMarkdownImageUrls(parsed.data.content);
+    if (imageUrls.length)
+      await tx.mediaAttachment.updateMany({
+        where: {
+          userId: session.user.id,
+          questionId: null,
+          answerId: null,
+          url: { in: imageUrls },
+        },
+        data: { answerId: result.id },
+      });
+    return result;
   });
   logger.info("answer.updated", { answerId: id, userId: session.user.id });
   return NextResponse.json(actionSuccess(updated));

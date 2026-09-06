@@ -72,10 +72,25 @@ const envSchema = z
 
     READINESS_TOKEN: z.string().min(16),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
-    MONITORING_PROVIDER: z.enum(["log", "webhook"]).default("log"),
+    MONITORING_PROVIDER: z.enum(["log", "webhook", "sentry"]).default("log"),
     MONITORING_WEBHOOK_URL: optionalUrl,
     MONITORING_WEBHOOK_TOKEN: optionalString,
+    SENTRY_DSN: optionalUrl,
+    SENTRY_ENVIRONMENT: optionalString,
+    SENTRY_RELEASE: optionalString,
+
+    ANALYTICS_PROVIDER: z
+      .enum(["none", "log", "webhook", "posthog"])
+      .default("none"),
+    ANALYTICS_WEBHOOK_URL: optionalUrl,
+    ANALYTICS_WEBHOOK_TOKEN: optionalString,
+    POSTHOG_PROJECT_API_KEY: optionalString,
+    POSTHOG_HOST: optionalUrl,
     ANALYTICS_ID: optionalString,
+
+    PUSH_PROVIDER: z.enum(["none", "webhook"]).default("none"),
+    PUSH_WEBHOOK_URL: optionalUrl,
+    PUSH_WEBHOOK_TOKEN: optionalString,
   })
   .superRefine((value, context) => {
     if (
@@ -131,6 +146,42 @@ const envSchema = z
         path: ["MONITORING_WEBHOOK_URL"],
       });
     }
+    if (value.MONITORING_PROVIDER === "sentry" && !value.SENTRY_DSN) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "SENTRY_DSN is required when MONITORING_PROVIDER=sentry",
+        path: ["SENTRY_DSN"],
+      });
+    }
+    if (
+      value.ANALYTICS_PROVIDER === "webhook" &&
+      !value.ANALYTICS_WEBHOOK_URL
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "ANALYTICS_WEBHOOK_URL is required when ANALYTICS_PROVIDER=webhook",
+        path: ["ANALYTICS_WEBHOOK_URL"],
+      });
+    }
+    if (
+      value.ANALYTICS_PROVIDER === "posthog" &&
+      !value.POSTHOG_PROJECT_API_KEY
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "POSTHOG_PROJECT_API_KEY is required when ANALYTICS_PROVIDER=posthog",
+        path: ["POSTHOG_PROJECT_API_KEY"],
+      });
+    }
+    if (value.PUSH_PROVIDER === "webhook" && !value.PUSH_WEBHOOK_URL) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PUSH_WEBHOOK_URL is required when PUSH_PROVIDER=webhook",
+        path: ["PUSH_WEBHOOK_URL"],
+      });
+    }
     if (value.APP_ENV === "production") {
       const productionChecks: Array<[boolean, keyof typeof value, string]> = [
         [
@@ -153,6 +204,11 @@ const envSchema = z
           value.RATE_LIMIT_PROVIDER === "upstash",
           "RATE_LIMIT_PROVIDER",
           "Production must use distributed rate limiting",
+        ],
+        [
+          value.TRUST_PROXY,
+          "TRUST_PROXY",
+          "Production must trust forwarding headers behind the deployment proxy",
         ],
         [
           value.EMAIL_PROVIDER === "resend",
@@ -214,7 +270,18 @@ export const env = envSchema.parse({
   MONITORING_PROVIDER: process.env.MONITORING_PROVIDER,
   MONITORING_WEBHOOK_URL: process.env.MONITORING_WEBHOOK_URL,
   MONITORING_WEBHOOK_TOKEN: process.env.MONITORING_WEBHOOK_TOKEN,
+  SENTRY_DSN: process.env.SENTRY_DSN,
+  SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT,
+  SENTRY_RELEASE: process.env.SENTRY_RELEASE,
+  ANALYTICS_PROVIDER: process.env.ANALYTICS_PROVIDER,
+  ANALYTICS_WEBHOOK_URL: process.env.ANALYTICS_WEBHOOK_URL,
+  ANALYTICS_WEBHOOK_TOKEN: process.env.ANALYTICS_WEBHOOK_TOKEN,
+  POSTHOG_PROJECT_API_KEY: process.env.POSTHOG_PROJECT_API_KEY,
+  POSTHOG_HOST: process.env.POSTHOG_HOST,
   ANALYTICS_ID: process.env.ANALYTICS_ID,
+  PUSH_PROVIDER: process.env.PUSH_PROVIDER,
+  PUSH_WEBHOOK_URL: process.env.PUSH_WEBHOOK_URL,
+  PUSH_WEBHOOK_TOKEN: process.env.PUSH_WEBHOOK_TOKEN,
 });
 
 export type RuntimeEnvironment = typeof env;

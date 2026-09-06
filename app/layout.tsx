@@ -1,8 +1,9 @@
-// root layout – fonts, providers, skip link
+// root layout: fonts, providers, skip link
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { appBaseUrl } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,13 +14,29 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "QueryHub — Learn from people who know",
-    template: "%s · QueryHub",
+    default: "QueryHub - Learn from people who know",
+    template: "%s | QueryHub",
   },
   description:
     "Ask thoughtful questions, share useful knowledge, and learn from curious people.",
-  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(appBaseUrl()),
+  openGraph: {
+    type: "website",
+    siteName: "QueryHub",
+    title: "QueryHub - Learn from people who know",
+    description:
+      "Ask thoughtful questions, share useful knowledge, and learn from curious people.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QueryHub - Learn from people who know",
+    description:
+      "Ask thoughtful questions, share useful knowledge, and learn from curious people.",
+  },
 };
+
+export const dynamic = "force-dynamic";
 
 export default function RootLayout({
   children,

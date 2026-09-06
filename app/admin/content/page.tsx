@@ -2,16 +2,18 @@
 
 import type { Metadata } from "next";
 import { AdminTable } from "@/components/admin/admin-table";
-import { getAdminRows } from "@/lib/query-data";
+import { parseAdminOptions, type AdminSearchParams } from "@/lib/admin-options";
+import { getAdminRowsPage } from "@/lib/query-data";
 export const metadata: Metadata = { title: "Manage content" };
 export default async function AdminContentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<AdminSearchParams>;
 }) {
-  const rows = await getAdminRows("content");
   const params = await searchParams;
-  return (
-    <AdminTable kind="content" rows={rows} initialQuery={params.q ?? ""} />
+  const initialPage = await getAdminRowsPage(
+    "content",
+    parseAdminOptions(params),
   );
+  return <AdminTable kind="content" initialPage={initialPage} />;
 }

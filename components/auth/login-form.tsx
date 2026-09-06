@@ -33,10 +33,10 @@ export function LoginForm({
             params.get("emailChange") === "invalid"
           ? "That email link is invalid or has expired."
           : "";
-  // demo credentials prefilled for local testing
+  // keep production sign-in empty so demo accounts are not exposed.
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "maya@queryhub.dev", password: "DemoPass123!" },
+    defaultValues: { email: "", password: "" },
   });
   async function submit(values: LoginInput) {
     setServerError("");
@@ -46,9 +46,7 @@ export function LoginForm({
       callbackUrl: safeRedirectPath(params.get("callbackUrl")),
     });
     if (result?.error) {
-      setServerError(
-        "Email or password is incorrect. Try the demo credentials below.",
-      );
+      setServerError("Email or password is incorrect.");
       return;
     }
     router.push(result?.url ?? "/home");
@@ -138,7 +136,7 @@ export function LoginForm({
         size="lg"
         disabled={form.formState.isSubmitting}
       >
-        {form.formState.isSubmitting ? "Signing in…" : "Sign in"}
+        {form.formState.isSubmitting ? "Signing in..." : "Sign in"}
       </Button>
       <div className="relative flex items-center">
         <span className="h-px flex-1 bg-border" />
@@ -188,10 +186,6 @@ export function LoginForm({
           Create an account
         </Link>
       </p>
-      <div className="rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground">
-        <strong className="text-foreground">Demo:</strong> maya@queryhub.dev /
-        DemoPass123!
-      </div>
     </form>
   );
 }

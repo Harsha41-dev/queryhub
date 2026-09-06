@@ -63,6 +63,7 @@ export const questionUpdateSchema = questionSchema
 
 export const answerSchema = z.object({
   questionId: z.string().cuid(),
+  credentialId: z.string().cuid().optional(),
   content: z
     .string()
     .trim()
@@ -165,9 +166,31 @@ export const preferencesSchema = z.object({
   allowMessages: z.boolean().optional(),
   emailDigest: z.boolean().optional(),
   emailAnswers: z.boolean().optional(),
+  emailAnswerRequests: z.boolean().optional(),
+  emailAcceptedAnswers: z.boolean().optional(),
+  emailSpacePosts: z.boolean().optional(),
   emailComments: z.boolean().optional(),
   emailFollowers: z.boolean().optional(),
   pushNotifications: z.boolean().optional(),
+});
+
+export const notificationMuteSchema = z
+  .object({
+    targetUserId: z.string().cuid().optional(),
+    topicId: z.string().cuid().optional(),
+    muted: z.boolean(),
+  })
+  .refine(
+    (data) => [data.targetUserId, data.topicId].filter(Boolean).length === 1,
+    "Choose one notification source to update",
+  );
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string().trim().url().max(3000),
+  keys: z.object({
+    p256dh: z.string().trim().min(20).max(500),
+    auth: z.string().trim().min(10).max(300),
+  }),
 });
 
 export const accountSchema = z
@@ -223,6 +246,137 @@ export const mediaUploadSchema = z.object({
     .max(5 * 1024 * 1024, "Files must be 5 MB or smaller"),
   type: z.enum(["image/jpeg", "image/png", "image/webp"]),
 });
+
+export const answerRequestSchema = z.object({
+  questionId: z.string().cuid(),
+  userId: z.string().cuid(),
+  message: z.string().trim().max(500).optional(),
+});
+
+export const answerRequestUpdateSchema = z.object({
+  id: z.string().cuid(),
+  action: z.enum(["DISMISS", "ANSWERED"]),
+});
+
+export const credentialSchema = z.object({
+  id: z.string().cuid().optional(),
+  label: z.string().trim().min(4).max(160),
+  organization: z.string().trim().max(120).optional().default(""),
+  url: webUrlSchema.optional(),
+  topicId: z.string().cuid().optional(),
+  isDefault: z.boolean().optional().default(false),
+});
+
+export const feedFeedbackSchema = z
+  .object({
+    questionId: z.string().cuid().optional(),
+    authorId: z.string().cuid().optional(),
+    topicId: z.string().cuid().optional(),
+    type: z.enum(["HIDE_QUESTION", "MUTE_USER", "NOT_INTERESTED_TOPIC"]),
+  })
+  .refine(
+    (data) =>
+      [data.questionId, data.authorId, data.topicId].filter(Boolean).length ===
+      1,
+    "Choose exactly one feed item to tune.",
+  )
+  .refine(
+    (data) =>
+      (data.type === "HIDE_QUESTION" && Boolean(data.questionId)) ||
+      (data.type === "MUTE_USER" && Boolean(data.authorId)) ||
+      (data.type === "NOT_INTERESTED_TOPIC" && Boolean(data.topicId)),
+    "The feedback type does not match the selected target.",
+  );
+
+export const bookmarkCollectionSchema = z.object({
+  id: z.string().cuid().optional(),
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(300).optional().default(""),
+});
+
+export const bookmarkMoveSchema = z.object({
+  bookmarkId: z.string().cuid(),
+  collectionId: z.string().cuid().nullable(),
+});
+
+export const acceptedAnswerSchema = z.object({
+  answerId: z.string().cuid().nullable(),
+});
+
+export const questionMergeSchema = z.object({
+  targetQuestionId: z.string().cuid(),
+  note: z.string().trim().max(2000).optional(),
+});
+
+export const onboardingSchema = z.object({
+  topicIds: z.array(z.string().cuid()).max(10).default([]),
+  userIds: z.array(z.string().cuid()).max(10).default([]),
+});
+
+export const spaceSubmitSchema = z.object({
+  questionId: z.string().cuid(),
+});
+
+export const spaceSchema = z.object({
+  name: z.string().trim().min(3).max(80),
+  description: z.string().trim().min(20).max(1000),
+  rules: z.string().trim().max(2000).optional().default(""),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional()
+    .default("#4f46e5"),
+  allowMemberSubmissions: z.boolean().optional().default(true),
+  requireApproval: z.boolean().optional().default(true),
+});
+
+export const spaceUpdateSchema = z.object({
+  action: z.literal("UPDATE_SETTINGS"),
+  name: z.string().trim().min(3).max(80),
+  description: z.string().trim().min(20).max(1000),
+  rules: z.string().trim().max(2000).optional().default(""),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional()
+    .default("#4f46e5"),
+  allowMemberSubmissions: z.boolean(),
+  requireApproval: z.boolean(),
+});
+
+export const spaceMemberSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("UPDATE_MEMBER"),
+    userId: z.string().cuid(),
+    role: z.enum(["MODERATOR", "CONTRIBUTOR", "MEMBER"]),
+  }),
+  z.object({
+    action: z.literal("REMOVE_MEMBER"),
+    userId: z.string().cuid(),
+  }),
+]);
+
+export const spaceInviteSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("INVITE"),
+    username: z
+      .string()
+      .trim()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/)
+      .transform((value) => value.toLowerCase()),
+    role: z.enum(["MODERATOR", "CONTRIBUTOR", "MEMBER"]).default("MEMBER"),
+    message: z.string().trim().max(500).optional().default(""),
+  }),
+  z.object({
+    action: z.literal("RESPOND"),
+    inviteId: z.string().cuid(),
+    response: z.enum(["ACCEPT", "DECLINE"]),
+  }),
+]);
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;

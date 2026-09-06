@@ -12,13 +12,14 @@ import {
 import { env } from "@/lib/env";
 
 export type StoredObject = { key: string; url: string };
+type StorageFolder = "avatars" | "content";
 
 function localRoot() {
   return path.join(process.cwd(), ".local-uploads");
 }
 
 function safeLocalPath(key: string) {
-  if (!/^avatars\/[a-f0-9-]+\.webp$/i.test(key))
+  if (!/^(avatars|content)\/[a-f0-9-]+\.webp$/i.test(key))
     throw new Error("Invalid object key");
   const root = localRoot();
   const target = path.resolve(root, key);
@@ -39,9 +40,12 @@ function s3Client() {
   });
 }
 
-// save avatar either to local folder or S3/R2
-export async function putAvatar(data: Buffer): Promise<StoredObject> {
-  const key = `avatars/${randomUUID()}.webp`;
+// save an image either to a local folder or S3/R2.
+async function putImage(
+  data: Buffer,
+  folder: StorageFolder,
+): Promise<StoredObject> {
+  const key = `${folder}/${randomUUID()}.webp`;
 
   if (env.STORAGE_PROVIDER === "s3") {
     await s3Client().send(
@@ -68,12 +72,21 @@ export async function putAvatar(data: Buffer): Promise<StoredObject> {
   };
 }
 
+// save avatar image.
+export async function putAvatar(data: Buffer): Promise<StoredObject> {
+  return putImage(data, "avatars");
+}
+
+export async function putContentImage(data: Buffer): Promise<StoredObject> {
+  return putImage(data, "content");
+}
+
 export async function deleteByUrl(url: string) {
   if (env.STORAGE_PROVIDER === "s3") {
     const prefix = `${env.S3_PUBLIC_BASE_URL!.replace(/\/$/, "")}/`;
     if (!url.startsWith(prefix)) return;
     const key = url.slice(prefix.length);
-    if (!/^avatars\/[a-f0-9-]+\.webp$/i.test(key)) return;
+    if (!/^(avatars|content)\/[a-f0-9-]+\.webp$/i.test(key)) return;
     await s3Client().send(
       new DeleteObjectCommand({ Bucket: env.S3_BUCKET!, Key: key }),
     );

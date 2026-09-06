@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  acceptedAnswerSchema,
+  answerRequestSchema,
+  bookmarkCollectionSchema,
+  credentialSchema,
+  feedFeedbackSchema,
   mediaUploadSchema,
+  notificationMuteSchema,
+  onboardingSchema,
   profileSchema,
+  questionMergeSchema,
+  pushSubscriptionSchema,
   questionSchema,
   registerSchema,
   reportSchema,
+  spaceMemberSchema,
+  spaceSchema,
+  spaceInviteSchema,
+  spaceUpdateSchema,
   voteSchema,
 } from "@/lib/validators";
 import { sanitizeAnswerHtml } from "@/lib/sanitize";
@@ -59,6 +72,112 @@ describe("input validation", () => {
     expect(
       reportSchema.safeParse({ profileId: id, reason: "SPAM" }).success,
     ).toBe(true);
+  });
+
+  it("validates the Quora-style workflow payloads", () => {
+    const id = "clh1234567890abcdefghijkl";
+    expect(
+      answerRequestSchema.safeParse({
+        questionId: id,
+        userId: id,
+        message: "Could you answer this from your experience?",
+      }).success,
+    ).toBe(true);
+    expect(
+      credentialSchema.safeParse({
+        label: "Software Engineer at X",
+        organization: "X",
+        url: "https://example.com",
+        isDefault: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      feedFeedbackSchema.safeParse({ type: "MUTE_USER", topicId: id }).success,
+    ).toBe(false);
+    expect(
+      bookmarkCollectionSchema.safeParse({ name: "Interview Prep" }).success,
+    ).toBe(true);
+    expect(
+      notificationMuteSchema.safeParse({ targetUserId: id, muted: true })
+        .success,
+    ).toBe(true);
+    expect(
+      notificationMuteSchema.safeParse({
+        targetUserId: id,
+        topicId: id,
+        muted: true,
+      }).success,
+    ).toBe(false);
+    expect(acceptedAnswerSchema.safeParse({ answerId: id }).success).toBe(true);
+    expect(
+      questionMergeSchema.safeParse({ targetQuestionId: id }).success,
+    ).toBe(true);
+    expect(acceptedAnswerSchema.safeParse({ answerId: null }).success).toBe(
+      true,
+    );
+    expect(
+      onboardingSchema.safeParse({ topicIds: Array(11).fill(id) }).success,
+    ).toBe(false);
+    expect(
+      spaceSchema.safeParse({
+        name: "AI Builders",
+        description: "A practical space for builders to discuss AI products.",
+        color: "#0891b2",
+        rules: "Share specific questions and cite sources when possible.",
+        allowMemberSubmissions: true,
+        requireApproval: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      spaceUpdateSchema.safeParse({
+        action: "UPDATE_SETTINGS",
+        name: "AI Builders",
+        description: "A practical space for builders to discuss AI products.",
+        color: "#0891b2",
+        allowMemberSubmissions: false,
+        requireApproval: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      spaceMemberSchema.safeParse({
+        action: "UPDATE_MEMBER",
+        userId: id,
+        role: "MODERATOR",
+      }).success,
+    ).toBe(true);
+    expect(
+      spaceInviteSchema.safeParse({
+        action: "INVITE",
+        username: "topic_expert",
+        role: "CONTRIBUTOR",
+        message: "Would love your answers here.",
+      }).success,
+    ).toBe(true);
+    expect(
+      spaceInviteSchema.safeParse({
+        action: "RESPOND",
+        inviteId: id,
+        response: "ACCEPT",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("validates browser push subscriptions", () => {
+    expect(
+      pushSubscriptionSchema.safeParse({
+        endpoint: "https://push.example.test/subscription/abc",
+        keys: {
+          p256dh: "abcdefghijklmnopqrstuvwxyz1234567890",
+          auth: "auth-token-12345",
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      pushSubscriptionSchema.safeParse({
+        endpoint: "not-a-url",
+        keys: { p256dh: "short", auth: "short" },
+      }).success,
+    ).toBe(false);
   });
 
   it("bounds uploads and removes unsafe rich content", () => {

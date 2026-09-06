@@ -9,6 +9,7 @@ import {
   Bell,
   Bookmark,
   CircleHelp,
+  Globe2,
   Home,
   LogIn,
   LogOut,
@@ -27,6 +28,7 @@ import { cn, contrastTextColor } from "@/lib/utils";
 const links = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/following", label: "Following", icon: Users },
+  { href: "/spaces", label: "Spaces", icon: Globe2 },
   { href: "/answer", label: "Answer requests", icon: MessageSquareText },
   { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
   { href: "/notifications", label: "Notifications", icon: Bell },
@@ -131,7 +133,7 @@ export function LeftSidebar({
               href="/register"
               className="mt-2 inline-flex font-semibold text-primary"
             >
-              Create account →
+              Create account {"->"}
             </Link>
           </div>
         ) : (

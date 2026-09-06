@@ -52,7 +52,10 @@ export async function GET(request: Request) {
       id: session ? { not: session.user.id } : undefined,
       deletedAt: null,
       suspendedAt: null,
-      preference: { is: { profilePublic: true } },
+      OR: [
+        { preference: { is: null } },
+        { preference: { is: { profilePublic: true } } },
+      ],
     },
     select: {
       id: true,

@@ -1,16 +1,18 @@
 "use client";
 
-// notifications page – filter tabs + mark as read
+// notifications page: filter tabs and mark as read
 
 import Link from "next/link";
 import { useState } from "react";
 import {
   AtSign,
+  Award,
   Bell,
   CheckCheck,
   Heart,
   MessageCircle,
   ShieldAlert,
+  Users,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,11 +23,14 @@ import { cn, relativeDate } from "@/lib/utils";
 
 const icons = {
   answer: Bell,
+  "answer-request": MessageCircle,
+  accepted: Award,
   upvote: Heart,
   comment: MessageCircle,
   follow: UserPlus,
   mention: AtSign,
   moderation: ShieldAlert,
+  space: Users,
 };
 
 export function NotificationList({
@@ -40,10 +45,13 @@ export function NotificationList({
   const visible = items.filter(
     (item) =>
       tab === "All" ||
-      (tab === "Responses" && ["answer", "comment"].includes(item.type)) ||
+      (tab === "Responses" &&
+        ["answer", "answer-request", "accepted", "comment"].includes(
+          item.type,
+        )) ||
       (tab === "Mentions" && item.type === "mention") ||
       (tab === "Activity" &&
-        ["follow", "upvote", "moderation"].includes(item.type)),
+        ["follow", "upvote", "moderation", "space"].includes(item.type)),
   );
 
   // mark one notification read (optimistic)

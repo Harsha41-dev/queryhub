@@ -42,6 +42,7 @@ if (appEnvironment === "production") {
       process.env.RATE_LIMIT_PROVIDER === "upstash",
       "RATE_LIMIT_PROVIDER must be upstash",
     ],
+    [process.env.TRUST_PROXY === "true", "TRUST_PROXY must be true"],
     [process.env.EMAIL_PROVIDER === "resend", "EMAIL_PROVIDER must be resend"],
     [process.env.STORAGE_PROVIDER === "s3", "STORAGE_PROVIDER must be s3"],
   ];
@@ -72,6 +73,35 @@ if (appEnvironment === "production") {
   )
     errors.push("READINESS_TOKEN must be generated for production");
 }
+
+if (
+  process.env.MONITORING_PROVIDER === "webhook" &&
+  !process.env.MONITORING_WEBHOOK_URL?.trim()
+)
+  errors.push(
+    "MONITORING_WEBHOOK_URL is required when MONITORING_PROVIDER=webhook",
+  );
+if (process.env.MONITORING_PROVIDER === "sentry" && !process.env.SENTRY_DSN)
+  errors.push("SENTRY_DSN is required when MONITORING_PROVIDER=sentry");
+if (
+  process.env.ANALYTICS_PROVIDER === "webhook" &&
+  !process.env.ANALYTICS_WEBHOOK_URL?.trim()
+)
+  errors.push(
+    "ANALYTICS_WEBHOOK_URL is required when ANALYTICS_PROVIDER=webhook",
+  );
+if (
+  process.env.ANALYTICS_PROVIDER === "posthog" &&
+  !process.env.POSTHOG_PROJECT_API_KEY?.trim()
+)
+  errors.push(
+    "POSTHOG_PROJECT_API_KEY is required when ANALYTICS_PROVIDER=posthog",
+  );
+if (
+  process.env.PUSH_PROVIDER === "webhook" &&
+  !process.env.PUSH_WEBHOOK_URL?.trim()
+)
+  errors.push("PUSH_WEBHOOK_URL is required when PUSH_PROVIDER=webhook");
 
 if (errors.length) {
   console.error(

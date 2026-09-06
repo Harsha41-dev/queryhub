@@ -17,6 +17,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:load": "node scripts/load-test.mjs",
+    "notifications:digest": "tsx scripts/send-notification-digest.ts",
+    "notifications:push": "tsx scripts/send-push-notifications.ts",
     "security:check": "node scripts/security-check.mjs",
     "security:client": "node scripts/check-client-secrets.mjs",
     "env:validate": "node scripts/validate-env.mjs",
@@ -38,15 +41,15 @@
     "date-fns": "4.1.0",
     "dotenv": "^16.6.1",
     "lucide-react": "0.468.0",
-    "next": "16.2.10",
-    "next-auth": "4.24.14",
+    "next": "16.3.3",
+    "next-auth": "4.24.15",
     "next-themes": "0.4.6",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-hook-form": "7.62.0",
-    "sanitize-html": "2.17.0",
+    "sanitize-html": "2.17.7",
     "server-only": "0.0.1",
-    "sharp": "^0.34.3",
+    "sharp": "0.35.4",
     "sonner": "2.0.7",
     "tailwind-merge": "3.3.1",
     "zod": "3.25.76"
@@ -64,9 +67,9 @@
     "@typescript-eslint/parser": "8.40.0",
     "autoprefixer": "10.4.21",
     "eslint": "9.33.0",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.3.3",
     "jsdom": "26.1.0",
-    "postcss": "8.5.10",
+    "postcss": "8.5.26",
     "prettier": "^3.6.2",
     "prisma": "6.19.3",
     "tailwindcss": "3.4.19",
@@ -75,7 +78,8 @@
     "vitest": "3.2.7"
   },
   "overrides": {
-    "postcss": "8.5.10",
+    "deepmerge-ts": "8.0.2",
+    "postcss": "8.5.26",
     "uuid": "11.1.1"
   }
 }
