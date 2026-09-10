@@ -57,8 +57,14 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${outfit.variable} ${serif.variable} ${mono.variable}`} suppressHydrationWarning>
-      <body className={`${outfit.variable} ${serif.variable} ${mono.variable} font-sans`}>
+    <html
+      lang="en"
+      className={`${outfit.variable} ${serif.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
+      <body
+        className={`${outfit.variable} ${serif.variable} ${mono.variable} font-sans`}
+      >
         {/* keyboard users can jump past the nav */}
         <a
           href="#main-content"

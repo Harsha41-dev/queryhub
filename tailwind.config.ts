@@ -33,9 +33,25 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Outfit", "ui-sans-serif", "system-ui", "sans-serif"],
-        serif: ["var(--font-serif)", "Instrument Serif", "Times New Roman", "serif"],
-        mono: ["var(--font-mono)", "IBM Plex Mono", "ui-monospace", "monospace"],
+        sans: [
+          "var(--font-sans)",
+          "Outfit",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
+        serif: [
+          "var(--font-serif)",
+          "Instrument Serif",
+          "Times New Roman",
+          "serif",
+        ],
+        mono: [
+          "var(--font-mono)",
+          "IBM Plex Mono",
+          "ui-monospace",
+          "monospace",
+        ],
       },
       borderRadius: {
         xl: "1.25rem",

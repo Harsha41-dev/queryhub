@@ -48,7 +48,8 @@
   h1,
   h2,
   h3 {
-    font-family: var(--font-serif), "Instrument Serif", "Times New Roman", serif;
+    font-family:
+      var(--font-serif), "Instrument Serif", "Times New Roman", serif;
     text-wrap: balance;
   }
   button,

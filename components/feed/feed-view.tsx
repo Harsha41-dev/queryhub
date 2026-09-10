@@ -35,7 +35,9 @@ export function FeedView({
   return (
     <div className="space-y-4">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">For you</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          For you
+        </p>
         <h1 className="mt-1 font-serif text-4xl">Questions worth answering</h1>
       </div>
       {publicMode && (

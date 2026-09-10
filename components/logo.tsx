@@ -11,7 +11,10 @@ export function Logo({
   return (
     <Link
       href="/"
-      className={cn("inline-flex items-center gap-2 text-foreground", className)}
+      className={cn(
+        "inline-flex items-center gap-2 text-foreground",
+        className,
+      )}
       aria-label="QueryHub home"
     >
       <svg viewBox="0 0 32 32" className="size-8" aria-hidden>
@@ -31,7 +34,9 @@ export function Logo({
           strokeLinecap="round"
         />
       </svg>
-      {!compact && <span className="text-lg font-medium tracking-tight">QueryHub</span>}
+      {!compact && (
+        <span className="text-lg font-medium tracking-tight">QueryHub</span>
+      )}
     </Link>
   );
 }

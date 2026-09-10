@@ -66,7 +66,8 @@ export function LeftSidebar({
               href={target}
               className={cn(
                 "flex h-11 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground",
-                active && "bg-primary font-medium text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                active &&
+                  "bg-primary font-medium text-primary-foreground hover:bg-primary hover:text-primary-foreground",
               )}
             >
               <Icon className="size-[18px]" /> {label}

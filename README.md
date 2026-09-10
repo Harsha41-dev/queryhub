@@ -38,21 +38,22 @@ The profile is reputation, answers, follows, and the questions I asked, answered
 
 ## Tech stack
 
-| Area | What I used |
-| --- | --- |
-| Frontend | Next.js App Router, React, TypeScript |
-| Styling | Tailwind CSS |
-| Backend | Next.js Route Handlers |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Auth | Auth.js / NextAuth |
-| Validation | Zod |
-| Testing | Vitest, Playwright |
-| Tooling | Docker, GitHub Actions |
+| Area       | What I used                           |
+| ---------- | ------------------------------------- |
+| Frontend   | Next.js App Router, React, TypeScript |
+| Styling    | Tailwind CSS                          |
+| Backend    | Next.js Route Handlers                |
+| Database   | PostgreSQL                            |
+| ORM        | Prisma                                |
+| Auth       | Auth.js / NextAuth                    |
+| Validation | Zod                                   |
+| Testing    | Vitest, Playwright                    |
+| Tooling    | Docker, GitHub Actions                |
 
 ## What I implemented
 
 **Q&A**
+
 - Ask with a description, topic tags, and optional images
 - Markdown answers with toolbar, preview, links, code, quotes, lists, and image upload
 - Upvote, downvote, follow, bookmark, comment, and report
@@ -60,27 +61,32 @@ The profile is reputation, answers, follows, and the questions I asked, answered
 - Duplicate suggestions and a moderator merge flow
 
 **Discovery**
+
 - For You feed from followed topics, followed users, followed questions, topic affinity, votes, freshness, answer count, views, and accepted answers
 - Hide, mute user, and not-interested-in-topic controls
 - Answer requests, and suggested answerers from topics, prior answers, reputation, and credentials
 - Search with autocomplete, filters, and ranking across questions, answers, topics, and people
 
 **Trust**
+
 - Profiles with bio, occupation, location, website, reputation, stats, and contribution history
 - Credentials next to answers
 - Badges for useful work, topic expertise, moderation, and top writers
 
 **Spaces**
+
 - Topic communities with create, join, roles, and invitations
 - Optional approval queues and Space rules
 - Owners and moderators can accept or reject submissions
 
 **Notifications**
+
 - In-app center for answers, comments, replies, mentions, follows, votes, accepted answers, Spaces, and moderation
 - Email templates, preferences, and per-user / per-topic mutes
 - Optional push subscriptions, a weekly digest job, and delivery audit records
 
 **Moderation and production**
+
 - Reports on questions, answers, comments, and profiles
 - Moderator dashboard with notes, history, hide / restore / suspend / merge
 - Lightweight spam signals for links, repeated text, promotional wording, and off-platform contact
@@ -164,11 +170,11 @@ Open `http://localhost:3000`.
 
 Password for every seed account: `DemoPass123!`
 
-| Role | Email |
-| --- | --- |
-| User | `maya@queryhub.dev` |
+| Role      | Email                    |
+| --------- | ------------------------ |
+| User      | `maya@queryhub.dev`      |
 | Moderator | `moderator@queryhub.dev` |
-| Admin | `admin@queryhub.dev` |
+| Admin     | `admin@queryhub.dev`     |
 
 The seed script is destructive. I only run it against a local or disposable database. Production seeding is blocked unless `ALLOW_PRODUCTION_SEED=true`.
 
