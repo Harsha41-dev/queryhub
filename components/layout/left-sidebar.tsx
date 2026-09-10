@@ -65,8 +65,8 @@ export function LeftSidebar({
               key={href}
               href={target}
               className={cn(
-                "flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground",
-                active && "bg-primary/10 font-semibold text-primary",
+                "flex h-11 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                active && "bg-primary font-medium text-primary-foreground hover:bg-primary hover:text-primary-foreground",
               )}
             >
               <Icon className="size-[18px]" /> {label}
@@ -82,7 +82,7 @@ export function LeftSidebar({
       {publicMode ? (
         <Link
           href="/login"
-          className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90"
+          className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <LogIn className="size-4" />
           Sign in to ask

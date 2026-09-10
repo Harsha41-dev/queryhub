@@ -366,7 +366,7 @@ export function QuestionDetail({
             </div>
           ) : (
             <>
-              <h1 className="mt-4 text-balance text-2xl font-extrabold leading-tight tracking-tight sm:text-[30px]">
+              <h1 className="mt-4 font-serif text-4xl leading-tight">
                 {title}
               </h1>
               {description && (

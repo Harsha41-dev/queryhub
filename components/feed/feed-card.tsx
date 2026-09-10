@@ -227,7 +227,7 @@ export function FeedCard({
   if (hidden) return null;
 
   return (
-    <article className="border-y bg-card p-4 shadow-card sm:rounded-xl sm:border sm:p-5">
+    <article className="overflow-hidden rounded-[28px] border border-border bg-card p-5 sm:p-6">
       {/* author row */}
       <header className="flex items-start gap-3">
         <Avatar
@@ -343,7 +343,7 @@ export function FeedCard({
         )}
       </div>
       <Link href={`/question/${question.slug}`}>
-        <h2 className="mt-3 text-[18px] font-bold leading-snug hover:text-primary sm:text-xl">
+        <h2 className="mt-3 font-serif text-2xl leading-snug hover:underline">
           {question.title}
         </h2>
       </Link>

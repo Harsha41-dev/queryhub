@@ -69,8 +69,8 @@ export function AppShell({
       />
       <div
         className={cn(
-          "mx-auto grid max-w-[1400px] grid-cols-1 gap-6 px-0 pb-24 md:grid-cols-[220px_minmax(0,1fr)] md:px-4 md:pb-8 lg:px-6",
-          rightSidebar && "xl:grid-cols-[220px_minmax(0,720px)_300px]",
+          "mx-auto grid max-w-[1200px] grid-cols-1 gap-8 px-4 pb-24 md:grid-cols-[200px_minmax(0,1fr)] md:px-4 md:pb-8",
+          rightSidebar && "xl:grid-cols-[200px_minmax(0,1fr)_260px]",
           wide && "xl:grid-cols-[220px_minmax(0,1fr)]",
         )}
       >

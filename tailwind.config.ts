@@ -32,8 +32,15 @@ const config: Config = {
           foreground: "hsl(var(--destructive-foreground))",
         },
       },
+      fontFamily: {
+        sans: ["var(--font-sans)", "Outfit", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["var(--font-serif)", "Instrument Serif", "Times New Roman", "serif"],
+        mono: ["var(--font-mono)", "IBM Plex Mono", "ui-monospace", "monospace"],
+      },
       borderRadius: {
-        xl: "0.875rem",
+        xl: "1.25rem",
+        "2xl": "1.5rem",
+        "3xl": "1.75rem",
       },
       boxShadow: {
         card: "0 1px 2px rgba(15, 23, 42, 0.04)",

@@ -10,11 +10,9 @@ export function PageHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <header className="flex items-start gap-4 border-y bg-card p-5 sm:rounded-xl sm:border sm:p-6">
+    <header className="flex items-start gap-4 rounded-[28px] border border-border bg-card p-6">
       <div className="min-w-0 flex-1">
-        <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">
-          {title}
-        </h1>
+        <h1 className="font-serif text-4xl">{title}</h1>
         {description && (
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {description}

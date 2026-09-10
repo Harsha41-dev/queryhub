@@ -24,7 +24,7 @@ export function MobileHeader({
     avatar: session?.user?.image,
   };
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-card/95 px-4 backdrop-blur md:hidden">
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur md:hidden">
       <Logo compact />
       <Link
         href="/search"

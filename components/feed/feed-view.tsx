@@ -33,10 +33,14 @@ export function FeedView({
       : filtered;
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-4">
+      <div>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">For you</p>
+        <h1 className="mt-1 font-serif text-4xl">Questions worth answering</h1>
+      </div>
       {publicMode && (
-        <div className="border-y border-primary/20 bg-primary/5 p-4 sm:rounded-xl sm:border">
-          <p className="font-semibold">
+        <div className="rounded-[28px] border border-border bg-card p-5">
+          <p className="font-serif text-xl">
             A community for people who stay curious.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -45,7 +49,7 @@ export function FeedView({
         </div>
       )}
       <FeedComposer onAsk={() => setAskOpen(true)} publicMode={publicMode} />
-      <section className="overflow-hidden border-y bg-card shadow-card sm:rounded-xl sm:border">
+      <section className="overflow-hidden rounded-[28px] border border-border bg-card">
         <FeedTabs
           active={active}
           onChange={(tab) => {
