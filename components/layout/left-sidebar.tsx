@@ -125,7 +125,7 @@ export function LeftSidebar({
       </div>
       <div className="mt-auto border-t pt-4">
         {publicMode ? (
-          <div className="rounded-xl bg-primary/10 p-3 text-sm">
+          <div className="rounded-xl border border-border bg-card p-3 text-sm">
             <p className="font-semibold">Make knowledge useful.</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               Join to vote, follow topics, and write answers.
