@@ -103,7 +103,7 @@ jobs:
 
       - name: Upload e2e artifacts if failed
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-diagnostics
           path: |
